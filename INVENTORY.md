@@ -17,6 +17,7 @@ file that does not exist, nothing keys symbol lookups on the `func_` name, nothi
 | `kitpaths.py` | `SP` (this directory), `REPO` (`$DQIX_REPO`, default `../dqix-decomp`), `CLAUDE_PROJECTS` (`~/.claude/projects`); every script reads its paths here |
 | `export_priors.py <source-sp> [-j N] [--dry-run]` | gate every saved attempt at an unmatched function in a pipeline directory's pools and keep the closest per address in `priors/<main\|ovNNN>/<addr>.cpp` + `priors/INDEX.tsv`; `resumable.py` reads `priors/` as a pool, so a fresh kit starts from the work already paid for |
 | `regress_fixtures/` | the prior sources `regress.py --slow` cracks end to end |
+| `kit_update.py` | fetch the published kit and fast-forward to it, print `RE-READ` for every changed agent instruction file, re-run `kit_init.py` (`--slow` when the gate or its tests changed); refuses while the fleet or an integration runs (exit 2) or while local changes or commits block a fast-forward (exit 3). `AGENTS.md` and the plan/continue/hand-match skills run it before any work |
 | `kit_init.py [--refs] [--slow]` | check dependencies and the decomp checkout, create the state directories and `OPEN_WORK.md`, build the worker docs, copy the agent-neutral skills (`PORTABLE_SKILLS`) from `.claude/skills/` to `.agents/skills/` for Codex and other Agent Skills readers; `--refs` clones and indexes `refs/VERIFIED.txt`, `--slow` runs `regress.py --slow` |
 
 ---

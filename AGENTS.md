@@ -4,6 +4,20 @@ This directory is `$SP`, the kit root. The decomp checkout is `$DQIX_REPO` (defa
 `../dqix-decomp`, branch `decomp-matching`). Every script resolves both through `kitpaths.py`. In
 Git Bash, `export SP="$(pwd -W 2>/dev/null || pwd)"` from this directory.
 
+## Before any work: update the kit
+
+The kit is maintained continuously; fixes, levers and rules land in it all the time. At the start of
+every session, and again before resuming work after any pause, run:
+
+    python kit_update.py
+
+| exit | meaning | do |
+|---|---|---|
+| 0 | up to date, or fast-forwarded and `kit_init.py` re-run | re-read every file it prints as `RE-READ`, then work |
+| 1 | the fetch failed (offline), or `kit_init.py` failed after an update | tell the user the line it printed; fix a `kit_init.py` FAIL before working |
+| 2 | the fleet or an integration is running, so nothing was pulled | tell the user an update is waiting; never pull under a running script |
+| 3 | local changes or local commits block the fast-forward | tell the user; never stash, reset or discard them yourself |
+
 ## Where things are
 
 | need | read |

@@ -39,6 +39,9 @@ Initialise the kit:
 
 `--slow` runs the end-to-end crack tests once; `selfcheck.py` fails until they have run.
 
+The kit is updated continuously. Start every session with `python kit_update.py`; agents are told to
+in `AGENTS.md`.
+
 Match one function. Module is `main` or a 3-digit overlay; addresses are 8 hex digits without `0x`.
 
     export SP="$(pwd -W 2>/dev/null || pwd)"

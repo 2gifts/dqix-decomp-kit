@@ -162,11 +162,16 @@ Decomp, on a clean tree:
     python tools/configure.py usa
     ninja min
 
-Kit:
+Kit, at the start of every session (`AGENTS.md` makes agents do this themselves):
 
-    git pull
-    python build_worker_docs.py
+    python kit_update.py
     python selfcheck.py
+
+`kit_update.py` fetches the published kit and fast-forwards to it, then re-runs `kit_init.py` (with
+`--slow` when the gate or its tests changed). It pulls nothing while `pull_all.pid`, `wave.lock` or
+`claims/INTEGRATING` exists, or while tracked files have local changes or local commits diverge;
+it says which and exits non-zero. A fork of the kit still updates from `ZevyaDev/dqix-decomp-kit`;
+`DQIX_KIT_URL` and `DQIX_KIT_BRANCH` point it elsewhere.
 
 Run `python build_worker_docs.py` after every edit to `worker_src/core.md`; workers read the built
 docs, not the source.

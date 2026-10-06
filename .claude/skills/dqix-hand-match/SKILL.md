@@ -12,7 +12,14 @@ workers (35%), and cracking one idiom unlocks every function shaped like it.
     SP    the kit root (this session's working directory)
     REPO  $DQIX_REPO, or ../dqix-decomp
 
-## Before anything: size the prize
+## Before anything: update the kit
+
+    python $SP/kit_update.py
+
+Exit 0: re-read every `RE-READ` file it prints (this skill included). Any other exit: tell the user
+the line it printed before going on.
+
+## Then size the prize
 
 If the goal is an idiom rather than one function, count how many unmatched functions it blocks
 first, and read a function that already matched despite it — more than once that "matched example"

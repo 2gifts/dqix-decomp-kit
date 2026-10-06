@@ -99,6 +99,14 @@ Do NOT open `INVENTORY.md`, the worker docs, `core.md`, `colorsweep.py`, `ov_rec
 pipeline script at startup. Start with the commands below. Open a script only when a step fails and
 you are debugging that script.
 
+## Update the kit first
+
+    python $SP/kit_update.py
+
+Before anything else, every time this plan starts or resumes. Exit 0: re-read every `RE-READ` file it
+prints (this skill included), then go on. Any other exit: tell the user the line it printed; on 2 or 3
+do not start or resume paid work until they answer.
+
 ## Where we are — READ THIS, do not re-derive it and do not edit it into this file
 
     $SP/STATE.md        GENERATED. Fleet counts, coverage in BYTES and functions, remaining work per

@@ -56,6 +56,14 @@ a lockout — each one pays full startup and then dies on its first API call.
 
 ## 3. Verify the pipeline before trusting it
 
+Update the kit first, now that nothing is running:
+
+    python $SP/kit_update.py
+
+Exit 0: re-read every `RE-READ` file it prints (this skill included). Exit 2 means something is still
+running, so step 1 is not done. Exit 1 or 3: tell the user the line it printed and do not re-enter the
+plan until they answer.
+
     cd $REPO
     python $SP/selfcheck.py          # every invariant holds — a red is REAL, not a standing exception
     python $SP/regress.py            # 0 failed  (--slow adds the end-to-end crack tests)
