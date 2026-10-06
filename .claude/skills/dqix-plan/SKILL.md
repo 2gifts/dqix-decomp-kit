@@ -26,7 +26,7 @@ So: put authorised spend on a worker, and let the worker's verdicts choose what 
 thread with no worker feeding it has nothing to react to. `python $SP/poolsize.py <mod>` sizes each
 module's unmatched pool.
 
-    SP    the kit root (this session's working directory)
+    SP    the kit root: $DQIX_SP when set, else this session's working directory
     REPO  $DQIX_REPO, or ../dqix-decomp
 
 ## The job, in the user's words

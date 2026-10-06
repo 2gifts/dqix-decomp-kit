@@ -2,7 +2,8 @@
 
 This directory is `$SP`, the kit root. The decomp checkout is `$DQIX_REPO` (default
 `../dqix-decomp`, branch `decomp-matching`). Every script resolves both through `kitpaths.py`. In
-Git Bash, `export SP="$(pwd -W 2>/dev/null || pwd)"` from this directory.
+Git Bash, `export SP="$(pwd -W 2>/dev/null || pwd)"` from this directory. A session that runs from
+another directory sets `DQIX_SP` to the kit root; skills and workflows read it.
 
 ## Before any work: update the kit
 

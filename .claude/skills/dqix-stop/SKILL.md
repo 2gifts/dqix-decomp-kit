@@ -10,7 +10,7 @@ explanation, and before any other tool call. Do not ask what to stop or whether 
 nothing here loses work: matched source stays on disk and every phase records its state in
 `$SP/wlog/`.
 
-    SP    the kit root (this session's working directory)
+    SP    the kit root: $DQIX_SP when set, else this session's working directory
     REPO  $DQIX_REPO, or ../dqix-decomp
 
 ## 1. Stop it

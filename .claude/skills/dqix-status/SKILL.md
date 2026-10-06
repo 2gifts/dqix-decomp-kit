@@ -8,7 +8,7 @@ description: Answer "where are we?" on the DQIX decomp — one command produces 
 The user is asking because they have not heard anything in a while. Give them movement and
 problems, not an inventory.
 
-    SP    the kit root (this session's working directory)
+    SP    the kit root: $DQIX_SP when set, else this session's working directory
     REPO  $DQIX_REPO, or ../dqix-decomp
 
 ## Get the data — one call

@@ -8,27 +8,21 @@
 !/docs/
 !/worker_src/
 !/pad/
-!/lab/
 !/frida/
 !/inv/
 !/merge_port/
-!/migrate/
+!/naming/
 !/refs/
 !/regress_fixtures/
 !/priors/
 !/archive/
-!/naming/
 !/*.py
 !/*.sh
 !/INVENTORY.md
 !/OPEN_RESIDUES.md
 !/OPEN_WORK.template.md
 !/REGALLOC_FINDINGS.md
-!/regalloc_brief.md
-!/worker_pull_prompt.md
 !/worker_sdkport.md
-!/worker_ov_all.md
-!/worker_ov_large.md
 !/asm_allow.txt
 !/skiplist_main.txt
 !/skiplist_ov.txt
@@ -46,6 +40,11 @@ __pycache__/
 /refs/*
 !/refs/VERIFIED.txt
 
+/archive/*
+!/archive/README.md
+!/archive/02061c04/
+!/archive/probes/
+
 /pad/*
 !/pad/*.py
 !/pad/*.cpp
@@ -58,11 +57,8 @@ __pycache__/
 !/pad/renum/*.cpp
 !/pad/renum/*.md
 
-/lab/*
-!/lab/*.py
-
 /frida/*
 !/frida/*.py
 
 /inv/*
-!/inv/*.md
+!/inv/*_FINDINGS.md

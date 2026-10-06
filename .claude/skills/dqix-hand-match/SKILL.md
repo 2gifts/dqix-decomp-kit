@@ -9,7 +9,7 @@ This is main-thread work: the session doing the matching directly, no worker, no
 pays when the residual is small and the insight is the whole job — the small tier converts worst for
 workers (35%), and cracking one idiom unlocks every function shaped like it.
 
-    SP    the kit root (this session's working directory)
+    SP    the kit root: $DQIX_SP when set, else this session's working directory
     REPO  $DQIX_REPO, or ../dqix-decomp
 
 ## Before anything: update the kit

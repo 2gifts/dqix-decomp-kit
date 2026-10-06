@@ -9,7 +9,7 @@ The previous session is gone and will not be resumed. Everything you need is on 
 reconstruct state from a conversation summary or from memory files** — memories record what was true
 when they were written, and the last session may have died mid-address.
 
-    SP    the kit root (this session's working directory)
+    SP    the kit root: $DQIX_SP when set, else this session's working directory
     REPO  $DQIX_REPO, or ../dqix-decomp
 
 **Nothing that matters may live in a path something else clears** — not `%TEMP%`, not
