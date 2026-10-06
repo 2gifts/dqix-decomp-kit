@@ -1,0 +1,122 @@
+"""Prepare a fresh kit checkout: check dependencies and the decomp checkout, create state.
+
+    python kit_init.py            check, create state directories and OPEN_WORK.md, build worker docs
+    python kit_init.py --refs     also clone the reference decomps in refs/VERIFIED.txt and index them
+    python kit_init.py --slow     also run the end-to-end crack tests (regress.py --slow)
+
+The decomp checkout is $DQIX_REPO, or ../dqix-decomp next to the kit.
+"""
+import argparse
+import importlib.util
+import os
+import shutil
+import subprocess
+import sys
+
+import kitpaths
+
+SP = kitpaths.SP
+REPO = kitpaths.REPO
+
+STATE_DIRS = ["wlog", "wlog/gates", "wip", "staging", "handwork", "attempts", "claims", "scaffold",
+              "gated", "clsbest", "quarantine", "doc_cache", "refs"]
+REQUIRED = {"capstone": "capstone", "elftools": "pyelftools"}
+OPTIONAL = {"frida": "frida (only for frida/*.py and pad/renum/)", "yaml": "pyyaml (only for frida/schedforce.py)"}
+REPO_FILES = ["tools/configure.py", "config/usa/arm9/symbols.txt", "config/usa/arm9/delinks.txt",
+              "build.ninja", "extract/usa/arm9/arm9.bin"]
+
+
+def check_python():
+    ok = True
+    if sys.version_info < (3, 10):
+        print(f"FAIL  Python {sys.version.split()[0]}; 3.10 or newer is required")
+        ok = False
+    missing = [pkg for mod, pkg in REQUIRED.items() if importlib.util.find_spec(mod) is None]
+    if missing:
+        print(f"FAIL  missing Python packages: pip install {' '.join(missing)}")
+        ok = False
+    for mod, what in OPTIONAL.items():
+        if importlib.util.find_spec(mod) is None:
+            print(f"note  optional package not installed: {what}")
+    for tool in ("git", "ninja", "bash"):
+        if shutil.which(tool) is None:
+            print(f"FAIL  {tool} not on PATH")
+            ok = False
+    if shutil.which("claude") is None:
+        print("note  Claude Code CLI `claude` not on PATH; needed only for the worker fleet")
+    return ok
+
+
+def check_repo():
+    if not os.path.isdir(REPO):
+        print(f"FAIL  decomp checkout not found at {REPO}; clone it there or set DQIX_REPO")
+        return False
+    missing = [f for f in REPO_FILES if not os.path.exists(os.path.join(REPO, f))]
+    if missing:
+        print(f"FAIL  {REPO} is not configured and built; missing: {', '.join(missing)}")
+        print("      follow the decomp README (base ROM in place, python tools/configure.py, ninja check)")
+        return False
+    try:
+        import buildcfg
+    except Exception as e:
+        print(f"FAIL  buildcfg could not read the build configuration: {e}")
+        return False
+    if not os.path.exists(buildcfg.CC):
+        print(f"FAIL  compiler {buildcfg.CC} is missing; run `ninja check` in the decomp once to fetch the toolchain")
+        return False
+    branch = subprocess.run(["git", "-C", REPO, "rev-parse", "--abbrev-ref", "HEAD"],
+                            capture_output=True, text=True).stdout.strip()
+    print(f"ok    decomp checkout {REPO} (branch {branch or '?'}), compiler {buildcfg.MWCC_VERSION}")
+    return True
+
+
+def make_state():
+    for d in STATE_DIRS:
+        os.makedirs(os.path.join(SP, d), exist_ok=True)
+    ow = os.path.join(SP, "OPEN_WORK.md")
+    if not os.path.exists(ow):
+        shutil.copyfile(os.path.join(SP, "OPEN_WORK.template.md"), ow)
+        print("ok    created OPEN_WORK.md")
+    print(f"ok    state directories under {SP}")
+
+
+def run(argv):
+    print("run   " + " ".join(argv), flush=True)
+    return subprocess.run(argv, cwd=SP).returncode == 0
+
+
+def clone_refs():
+    refs = os.path.join(SP, "refs")
+    for line in open(os.path.join(refs, "VERIFIED.txt"), encoding="utf-8"):
+        parts = line.split()
+        if not parts or parts[0].startswith("#") or len(parts) < 2:
+            continue
+        dest = os.path.join(refs, parts[0])
+        if os.path.isdir(dest):
+            continue
+        if not run(["git", "clone", "--depth", "1", "--single-branch", parts[1], dest]):
+            print(f"FAIL  clone {parts[1]}")
+            return False
+    return run([sys.executable, "sdkident.py", "index"])
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--refs", action="store_true", help="clone and index the reference decomps")
+    ap.add_argument("--slow", action="store_true", help="run regress.py --slow")
+    args = ap.parse_args()
+    ok = check_python()
+    make_state()
+    repo_ok = check_repo()
+    ok = ok and repo_ok
+    if repo_ok:
+        ok = run([sys.executable, "build_worker_docs.py"]) and ok
+    if args.refs:
+        ok = clone_refs() and ok
+    if args.slow and repo_ok:
+        ok = run([sys.executable, "regress.py", "--slow"]) and ok
+    print("ready: run `python selfcheck.py`" if ok else "not ready: fix the FAIL lines above")
+    sys.exit(0 if ok else 1)
+
+
+main()

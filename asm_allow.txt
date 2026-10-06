@@ -1,0 +1,44 @@
+# Addresses that may be landed as hand-written assembly. Nothing else may be.
+#
+# The project goal is very little asm in the final product, so place() refuses hand-asm by policy.
+# That left the DS secure area (0x02000000-0x02000800) with no landing path at all: its stubs are
+# BIOS syscalls, a `swi` has no C form, and every DS decomp writes them as assembly. They were
+# refused by place() every wave and held back from the batch build for cumulative link drift, so
+# none of them had ever landed -- and the coverage number quietly understated the decomp by 11
+# functions as a result.
+#
+# This is an ADDRESS list, not a rule, on purpose: an "asm is fine below 0x02000800" rule would
+# open the door to anything that happens to live there. To add a line, the function must have no
+# C form that reaches the ROM bytes, and the reason must say why.
+#
+# Being on this list is permission, not a guarantee of landing. Nine of the stubs below start at
+# 2 mod 4, and dsd's lcf concatenates 4-aligned objects, so they cannot be delinked one per file at
+# all -- measured +4 downstream drift on an isolated build of 02000216. ov_recover keeps those out
+# of waves; they land only if the delink is reshaped to start 4-aligned. See align2_main.txt.
+#
+# Format: <8-hex addr>  <symbol>  <reason>
+
+0200006a  GetCRC16                          BIOS syscall stub (swi)
+02000216  Mod                               BIOS syscall stub (swi 9)
+0200026a  BitUnPack                         BIOS syscall stub (swi)
+0200033e  CpuFastSet                        BIOS syscall stub (swi)
+0200038e  RLUnCompReadByCallbackWrite16bit  BIOS syscall stub (swi)
+02000410  VBlankIntrWait                    BIOS syscall stub (swi 5), prologue `mov r2,#0` included
+02000466  WaitByLoop                        BIOS syscall stub (swi)
+020005d2  RLUnCompReadNormalWrite8bit       BIOS syscall stub (swi)
+020006aa  Div                               BIOS syscall stub (swi)
+02000732  Sqrt                              BIOS syscall stub (swi)
+0200078c  SoftReset                         BIOS syscall stub (swi)
+
+# NitroSDK fixed-point matrix routines the SDK itself ships as assembly. Verified against
+# refs/SonicRushAdventure-Decomp/lib/NitroSDK/src/fx/fx_mtx33.c and fx_mtx43.c, which define all
+# three as `asm void`, instruction for instruction the same as ours.
+#
+# NOT allowlisted, deliberately: 020ca594 VectorizedMemset and 020ca650 VectorizedInvertedMemcpy.
+# Their own headers say the reference decomp's assembly does not assemble to these bytes, so they
+# are ROM transcriptions rather than reference source, and they go back to workers for a C form.
+020c1180  MTX_Identity33_                   NitroSDK ships it as asm (SonicRush fx_mtx33.c:18)
+020c1840  MTX_Identity43_                   NitroSDK ships it as asm (SonicRush fx_mtx43.c:18)
+020c1868  MTX_Copy43To44_                   NitroSDK ships it as asm (SonicRush fx_mtx43.c:35)
+020c6938  GX_SendFifo64B                    NitroSDK ships it as asm (SonicRush gxasm.c:24)
+0200cd1c  _ll_mod                           CW runtime asm: pushes ip, branches into _ll_sdiv; asm in every ref (SonicRush msl.s)

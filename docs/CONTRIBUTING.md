@@ -1,0 +1,63 @@
+# Contributing
+
+Two repositories take contributions:
+
+| what | where |
+|---|---|
+| matched functions | [ZevyaDev/dqix-decomp](https://github.com/ZevyaDev/dqix-decomp), branch `decomp-matching` |
+| tool fixes, new levers, docs | [ZevyaDev/dqix-decomp-kit](https://github.com/ZevyaDev/dqix-decomp-kit) |
+
+## Avoid duplicate work
+
+`claim.py` claims are local to one machine. Before starting, open an issue in the kit repository
+naming the module or address range you are taking, for example `ov017 021bb000-021bc000` or
+`main 0205faf4`. Check open issues first and skip ranges someone holds. Close the issue when the
+work lands or you stop.
+
+## Matched functions
+
+1. Fork `ZevyaDev/dqix-decomp` and set it up as in [SETUP.md](SETUP.md): your fork as `origin`,
+   ZevyaDev as `zevya`, branch `decomp-matching`.
+2. Start from the current branch: `git pull --rebase zevya decomp-matching` on a clean tree.
+3. Match and land as in [WORKFLOW.md](WORKFLOW.md). `finish_wave.sh` commits and pushes to your
+   fork's `decomp-matching`.
+4. Open a pull request from your fork's `decomp-matching` against `ZevyaDev/dqix-decomp`
+   `decomp-matching`.
+
+A pull request is accepted when:
+
+- every commit leaves `ninja check` green, and `ninja sha1` OK when you have the BIOS dump
+- each function is byte-exact and wired into `symbols.txt` / `delinks.txt` (`integrate.py` does this
+  through the landing scripts)
+- definitions export the names `symbols.txt` binds, and each carries its `// USA:` tag
+- there is no hand assembly outside `asm_allow.txt`, no codegen `#pragma`, and nothing added to
+  `tools/cc_overrides.txt` or `tools/cc_flag_overrides.txt`
+- the source reads like code a developer wrote: typed structs and members, no comments beyond the
+  `// USA:` tag unless a line needs one
+- it changes nothing outside the functions it lands, apart from header or config changes those
+  functions need
+
+Rebase on `zevya/decomp-matching` before opening the pull request and run
+`python tools/configure.py usa && ninja check` again after the rebase.
+
+A near miss is not a pull request to the decomp. If you spent real effort ruling forms out, send a
+row for `worker_src/deadends.md` to the kit; if you found a lever, send the rule (below).
+
+## Tool fixes and new levers
+
+Before opening a pull request against the kit:
+
+    python selfcheck.py
+    python regress.py              # add --slow after touching colorsweep.py, wdiff.py or wgate.py
+    python pipetest.py             # after touching wgate.py, classify.py or integrate.py
+
+- A new script gets a line in `INVENTORY.md`; `selfcheck.py` fails on an uninventoried script.
+- A fix for a fault that happened gets a `regress.py` case that fails without the fix.
+- A new `colorsweep.py` rule gets a `regress.py` case and an instance in `pad/ruleprobe.cpp`.
+- A lever goes into `worker_src/core.md` as a rule citing the address it was found on, stated in a
+  few lines with no history. Run `python build_worker_docs.py` and confirm the text appears in the
+  built `worker_*.md`.
+- Fix the shared code path; never fork a script per module.
+- Read paths through `kitpaths.py`, the compiler and flags through `buildcfg.py`, source directories
+  through `srcdir.py`. No machine-specific paths.
+- Write files with an editor, not a shell heredoc.

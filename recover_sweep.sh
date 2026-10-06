@@ -1,0 +1,90 @@
+#!/bin/bash
+# ZERO-TOKEN RECOVERY SWEEP. Re-integrates matched worker source that is sitting on disk but is NOT
+# in the build, for every module that has any.
+#
+# WHY THIS EXISTS. hold_<mod>/ , <mod>_stage/ and quarantine/ accumulate every .cpp a worker ever
+# produced. A wave defers work for reasons that are NOT "the match is wrong" — gate-cap, link-layout
+# drift from a neighbour, a transient git index.lock (that one alone deferred 42 green functions in
+# ov001 wave 2; re-gating them later committed 41/42 on the first try). Those files were only ever
+# reconsidered when run_all happened to route back to that same module — but a module that defers its
+# wave scores low yield and goes ON COOLDOWN, so the module holding the most recoverable work is the
+# one least likely to be revisited. Measured at 68.75%: 419+ functions already matched, byte-exact,
+# on disk, invisible to the build. This sweep lands them for zero worker tokens.
+#
+# Serial by construction — ov_recover mutates config/ and gates a full `ninja check`; two at once
+# corrupt each other. Usage: bash recover_sweep.sh
+SP="$(cd "$(dirname "${BASH_SOURCE[0]}")" && { pwd -W 2>/dev/null || pwd; })"
+REPO="${DQIX_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && { pwd -W 2>/dev/null || pwd; })/dqix-decomp}"
+cd "$REPO" || exit 2
+LOG="$SP/wlog/sweep.log"
+echo "=== recover_sweep $(date '+%m-%d %H:%M:%S') ===" >> "$LOG"
+
+# HARVEST THE SCRATCHPAD FIRST. Workers iterate in SCRATCH/w<addr>.cpp and only copy the file into
+# src/ once it matches — so a worker killed BETWEEN achieving the match and copying leaves a real,
+# gate-verified match where nothing looks for it. Measured: 78 addrs a worker declared PASS on are
+# not in the build, 67 of them with a candidate still sitting in scratch; a full gate pass found 38
+# that match TODAY. This stages them into hold_* so the sweep below commits them.
+bash "$SP/wgate_scratch.sh" >> "$LOG" 2>&1
+
+# ZERO-TOKEN PRODUCERS. These generate and GATE candidate source with no model involved; anything that
+# passes is staged into hold_* and committed by the sweep below. Each is throttled by a stamp file
+# because they scan the whole remaining pool — worth doing regularly, wasteful every single module.
+#   synth      trivial accessor shapes derived straight from the disassembly
+#   translate  literal ARM->C transliteration, verified by the gate (21% at <=24 insns). The cap was
+#              24 insns because the translator emitted an unresolved marker for every `bl` and threw
+#              the whole draft away, so nothing with a call could ever pass; it resolves callees now.
+#   scaffold   regenerates the per-function fact sheets (callee names go stale as functions get renamed)
+_stamp="$SP/wlog/.zerotoken_stamp"
+_age=999999
+[ -f "$_stamp" ] && _age=$(( $(date +%s) - $(stat -c %Y "$_stamp") ))
+if [ "$_age" -gt 10800 ]; then          # at most once every 3h
+  echo "--- zero-token producers (last run ${_age}s ago)" >> "$LOG"
+  timeout 900  python "$SP/synth.py" --sweep 64    >> "$LOG" 2>&1
+  timeout 3600 python "$SP/translate.py" --sweep 256 >> "$LOG" 2>&1
+  timeout 1800 python "$SP/scaffold.py" --all       >> "$LOG" 2>&1
+  touch "$_stamp"
+  echo "--- zero-token producers done" >> "$LOG"
+fi
+# rank modules by how many DISTINCT matched addrs they hold that are not yet delinked
+MODS=$(python "$SP/recoverable.py" 2>/dev/null | awk '$2>0{print $1}')
+[ -z "$MODS" ] && { echo "nothing recoverable" >> "$LOG"; exit 0; }
+
+for M in $MODS; do
+  N=$(python "$SP/recoverable.py" "$M" 2>/dev/null | awk '{print $2}')
+  [ -z "$N" ] && N=0
+  [ "$N" -lt 1 ] && continue
+  echo "--- $M: $N recoverable" >> "$LOG"
+  # MAXGATES 24 (vs the 16 a worker wave uses): these candidates cost no tokens to retry, so it is
+  # worth more link-gates to isolate a drift culprit than it would be mid-wave.
+  # NOSKIP=1: reconsider skiplisted addrs too. The 2-strike skiplist records "a worker printed SKIP",
+  # which is not the same as "no match exists" — a different worker may already have matched it, and
+  # the strike bookkeeping has been wrong before (30 byte-exact functions were permanently written off
+  # that way). Free to re-test: classify runs locally at ~0.3s/func with no build, so a genuinely bad
+  # func is dropped before it can cost a single gate.
+  NOSKIP=1 MAXGATES=24 python "$SP/ov_recover.py" "$M" >> "$LOG" 2>&1
+  # ov_recover gates `ninja check` but does NOT build the ROM or verify the checksum — finish_wave.sh
+  # normally does that. Recovery commits are real commits, so they get the same full proof.
+  if ! ninja rom >/dev/null 2>&1 || ! ninja sha1 2>&1 | grep -q "OK"; then
+    echo "  $M: SHA1/ROM FAILED after recovery -> reverting last commit" >> "$LOG"
+    git reset --hard HEAD~1 >/dev/null 2>&1
+    python tools/configure.py usa --no-extract >/dev/null 2>&1
+    continue
+  fi
+  echo "  $M: green + sha1 OK" >> "$LOG"
+done
+
+# push once at the end (one push for the whole sweep, not one per module)
+if [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/decomp-matching 2>/dev/null)" ]; then
+  for t in 1 2 3; do
+    git push origin decomp-matching >/dev/null 2>&1 && { echo "pushed" >> "$LOG"; break; }
+    sleep 20
+  done
+fi
+rm -f build/usa/report.json; ninja report >/dev/null 2>&1
+# fail-soft: a missing/short report must never make the sweep look like it errored — run_all reads the
+# exit code of the last command, and a bare `python -c` that raises would report a failed sweep after
+# a run that actually committed everything it found.
+python -c "import json;m=json.load(open('build/usa/report.json'))['measures'];print('sweep end: %.2f%% (%d/%d)'%(m['matched_functions_percent'],m['matched_functions'],m['total_functions']))" >> "$LOG" 2>/dev/null \
+  || echo "sweep end: (report unavailable)" >> "$LOG"
+tail -1 "$LOG"
+exit 0

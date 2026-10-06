@@ -1,0 +1,4 @@
+0224185c ov031 speed-mode TU (if-conversion fingerprint), pinned until the decomp maintainers answer the compiler-flag question
+022192c0 ov031 matches only under -O2,p (evidence: gate), NHTTP-like library code, pinned until the decomp maintainers answer the compiler-flag question
+0221c5ac ov031 matches only under -O2,p (evidence: gate), NHTTP-like library code, pinned until the decomp maintainers answer the compiler-flag question
+021dbdec ov027 exact only at -O2,p + aligned extern (WM/wireless-like code), pinned until the decomp maintainers answer the compiler-flag question

@@ -1,0 +1,4 @@
+02005ea0 MSL, pinned until the decomp maintainers answer the compiler-flag question
+020042a8 MSL, pinned until the decomp maintainers answer the compiler-flag question
+0200df80 CW runtime ExceptionHandler, exact only at runtime flags -O4,p + exception_terminate, pinned until the decomp maintainers answer the compiler-flag question
+020d3160 NitroSDK OS_VSNPrintf, exact with SRA source at mwcc 2.0/sp1p2 -O4,p, pinned until the decomp maintainers answer the compiler-flag question

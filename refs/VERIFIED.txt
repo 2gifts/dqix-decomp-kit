@@ -1,0 +1,34 @@
+# Reference sources: Nintendo DS decompilations, each checked by hand before being listed here.
+#
+# Only a DS decompilation is evidence about DS code, and only DECOMPILED source counts -- a `.s`
+# file wrapped in arm_func_start/arm_func_end is a splitter dump, that project's un-decompiled
+# leftover, and sdkident drops it at index time regardless of which repository it sits in.
+#
+# Dragon Quest IX is excluded on purpose. There is one DQIX decompilation and five forks of it,
+# ours among them; matching against ourselves would confirm what we already have and prove nothing.
+# An independent DQIX project, if one ever appears, would be fair game.
+#
+# FIRST FIELD IS THE DIRECTORY NAME, SECOND IS THE CLONE URL. The URLs are recorded because they
+# were not, and the clones were lost: re-deriving thirteen of them cost a round of web searches.
+# Restore the whole set with:
+#
+#   cd $SP/refs && awk '!/^#/ && NF {print $1, $2}' VERIFIED.txt |
+#     while read -r d u; do [ -d "$d" ] || git clone --depth 1 --single-branch "$u" "$d"; done
+#   python $SP/sdkident.py index
+#
+# A repository still has to be a DS decomp to be useful; this file only records that a human
+# checked, because the structural test alone rejected genuine projects that vendor the SDK unusually.
+
+pokediamond                https://github.com/pret/pokediamond                       Pokemon Diamond/Pearl -- NitroSDK in arm9/lib, hand-written syscall stubs
+pokeheartgold              https://github.com/pret/pokeheartgold                     Pokemon HeartGold/SoulSilver -- NitroSDK in lib/, many asm void routines
+pokeplatinum               https://github.com/pret/pokeplatinum                      Pokemon Platinum -- modern tree, SDK linked rather than vendored
+pmd-sky                    https://github.com/pret/pmd-sky                           Pokemon Mystery Dungeon: Explorers of Sky
+pokeranger2                https://github.com/Kuruyia/pokeranger2                    Pokemon Ranger: Shadows of Almia
+pokeblack                  https://github.com/pokemodding/pokeblack                  Pokemon Black -- matching decompilation
+ph                         https://github.com/zeldaret/ph                            The Legend of Zelda: Phantom Hourglass (zeldaret, dsd toolchain)
+st                         https://github.com/zeldaret/st                            The Legend of Zelda: Spirit Tracks (zeldaret, dsd toolchain)
+sm64ds-decomp              https://github.com/tangosdev/sm64ds-decomp                Super Mario 64 DS -- from-scratch byte-matching
+khdays-decomp              https://github.com/Yokimitsuro/khdays-decomp              Kingdom Hearts 358/2 Days
+SonicRushAdventure-Decomp  https://github.com/RushRE/SonicRushAdventure-Decomp       Sonic Rush Adventure
+dsprot                     https://github.com/taxicat1/dsprot                        DS Protect
+nitro                      https://github.com/nitro-decomp/nitro                     NitroSDK itself -- pure C, no asm blocks at all
