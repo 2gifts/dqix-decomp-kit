@@ -34,8 +34,10 @@ Initialise the kit:
 
     cd ../dqix-decomp-kit
     python -m pip install capstone pyelftools
-    python kit_init.py
+    python kit_init.py --slow
     python selfcheck.py
+
+`--slow` runs the end-to-end crack tests once; `selfcheck.py` fails until they have run.
 
 Match one function. Module is `main` or a 3-digit overlay; addresses are 8 hex digits without `0x`.
 
