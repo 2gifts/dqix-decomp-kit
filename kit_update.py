@@ -53,10 +53,10 @@ def main():
         sys.exit(3)
     new = git("rev-parse", "HEAD").stdout.strip()
     changed = git("diff", "--name-only", old, new).stdout.split()
-    print(f"updated {old[:8]}..{new[:8]}: {behind} commit(s), {len(changed)} file(s)")
+    print(f"updated {old[:8]}..{new[:8]}: {behind} commit(s), {len(changed)} file(s)", flush=True)
     for f in changed:
         if f.startswith(INSTRUCTIONS):
-            print(f"RE-READ {f}")
+            print(f"RE-READ {f}", flush=True)
     argv = [sys.executable, "kit_init.py"]
     if any(f.startswith(SLOW_TRIGGERS) for f in changed):
         argv.append("--slow")
