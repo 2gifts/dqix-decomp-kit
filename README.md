@@ -42,6 +42,9 @@ Initialise the kit:
 The kit is updated continuously. Start every session with `python kit_update.py`; agents are told to
 in `AGENTS.md`.
 
+Your attempts, logs and staged matches live inside the kit directory as git-ignored files. Never run
+`git clean -x`, `git reset --hard` or `git checkout -f` in it.
+
 Match one function. Module is `main` or a 3-digit overlay; addresses are 8 hex digits without `0x`.
 
     export SP="$(pwd -W 2>/dev/null || pwd)"

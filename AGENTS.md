@@ -89,3 +89,7 @@ the user asks.
     the new text.
 17. Record work in progress in `OPEN_WORK.md` while working, not at the end. A fresh session starts
     from it.
+18. Every attempt, log, claim and staged match lives in the kit directory as a git-ignored file. In
+    the kit, never run `git clean`, `git reset --hard`, `git checkout -f`/`--force`, `git stash -u`/`-a`
+    or `git restore` on more than a named file: one of them erases that state for good. Updates go
+    through `kit_update.py` only.
