@@ -8,7 +8,7 @@
 | shell | Git Bash | the `.sh` scripts are bash; most take Windows paths from `pwd -W`, with a POSIX fallback |
 | Python | 3.10 | `kit_init.py` requires 3.10 or newer; the decomp README asks for 3.11 or newer |
 | `git`, `ninja`, `bash` | on PATH | `kit_init.py` checks for them |
-| Claude Code CLI `claude` | on PATH, logged in | needed only for the fleet, the skills and the workflows |
+| Claude Code CLI `claude` | on PATH, logged in | needed for the fleet and the workflows; Codex and other agents read `AGENTS.md` and `.agents/skills/` instead |
 
 The per-function tools run `tools/mwccarm/<version>/mwccarm.exe` from the decomp directly. They are
 untested on anything but Windows.

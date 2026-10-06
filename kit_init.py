@@ -1,6 +1,7 @@
 """Prepare a fresh kit checkout: check dependencies and the decomp checkout, create state.
 
-    python kit_init.py            check, create state directories and OPEN_WORK.md, build worker docs
+    python kit_init.py            check, create state directories and OPEN_WORK.md, build worker docs,
+                                  copy the agent-neutral skills into .agents/skills/
     python kit_init.py --refs     also clone the reference decomps in refs/VERIFIED.txt and index them
     python kit_init.py --slow     also run the end-to-end crack tests (regress.py --slow)
 
@@ -24,6 +25,7 @@ REQUIRED = {"capstone": "capstone", "elftools": "pyelftools"}
 OPTIONAL = {"frida": "frida (only for frida/*.py and pad/renum/)", "yaml": "pyyaml (only for frida/schedforce.py)"}
 REPO_FILES = ["tools/configure.py", "config/usa/arm9/symbols.txt", "config/usa/arm9/delinks.txt",
               "build.ninja", "extract/usa/arm9/arm9.bin"]
+PORTABLE_SKILLS = ["dqix-hand-match", "dqix-status", "dqix-stop"]
 
 
 def check_python():
@@ -80,6 +82,13 @@ def make_state():
     print(f"ok    state directories under {SP}")
 
 
+def mirror_skills():
+    for name in PORTABLE_SKILLS:
+        shutil.copytree(os.path.join(SP, ".claude", "skills", name),
+                        os.path.join(SP, ".agents", "skills", name), dirs_exist_ok=True)
+    print(f"ok    {len(PORTABLE_SKILLS)} skills copied to .agents/skills/")
+
+
 def run(argv):
     print("run   " + " ".join(argv), flush=True)
     return subprocess.run(argv, cwd=SP).returncode == 0
@@ -107,6 +116,7 @@ def main():
     args = ap.parse_args()
     ok = check_python()
     make_state()
+    mirror_skills()
     repo_ok = check_repo()
     ok = ok and repo_ok
     if repo_ok:

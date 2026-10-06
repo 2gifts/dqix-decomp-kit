@@ -91,8 +91,16 @@ explains every step.
 - [docs/LESSONS.md](docs/LESSONS.md) — compiler facts and pipeline rules learned the hard way
 - [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) — sending matches and tool fixes back
 
-## Claude Code
+## AI agents
 
-Opening Claude Code in the kit root loads [CLAUDE.md](CLAUDE.md), the skills `/dqix-plan`,
-`/dqix-continue`, `/dqix-status`, `/dqix-stop`, `/dqix-hand-match`, and the workflows `dqix-crack` and
-`dqix-evolve`.
+Run the agent with the kit root as its working directory; there is nothing to install beyond the
+quickstart. [AGENTS.md](AGENTS.md) holds the instructions and hard rules every agent reads.
+
+| agent | loads |
+|---|---|
+| Claude Code | `CLAUDE.md` (imports `AGENTS.md`), all five skills in `.claude/skills/`, the `dqix-crack` and `dqix-evolve` workflows in `.claude/workflows/` |
+| Codex and other Agent Skills readers | `AGENTS.md`, and `dqix-hand-match`, `dqix-status`, `dqix-stop` from `.agents/skills/`, which `kit_init.py` fills |
+| any other agent | `AGENTS.md`; the per-function flow in `docs/WORKFLOW.md` needs nothing but a shell |
+
+`dqix-plan`, `dqix-continue`, the workflows and the fleet use Claude Code features and stay Claude
+Code only. Edit skills in `.claude/skills/`; `.agents/skills/` is a generated copy.
