@@ -408,7 +408,10 @@ but not in a baseline report)
 | `pull_worker.sh` | spawn ONE worker on a claimed address, record verdict + cost | |
 | `claim.py` | atomic address claiming (`mkdir`), TTL reaping, `--status` / `--release` | |
 | `pullstat.py` | per-band stats and `--alerts` | |
-| `integrate_fast.sh` | clear the whole staged backlog with ONE build, per-module fallback on red | |
+| `integrate_fast.sh` | clear the whole staged backlog with ONE build; on red, cull the culprits the log names and rebuild (3 rounds), then per-module fallback | |
+| `culprits.py <log> [--cull]` | name the candidates a red build log blames (compile error, duplicate or undefined symbol, missing object, malformed config line, unplaced object); `--cull` moves their staged copies to `hold_<mod>` | `ov_recover` culls them before any bisection; `regress.py` covers each class |
+| `integ_tree.py path\|sync\|publish\|report` | the worktree integrations run in (`$DQIX_INTEG`, default `<decomp>-integ`; `off` = in place): created on first use, moved to the `decomp-matching` tip, pushed, main checkout fast-forwarded | `finish_wave.sh`, `integrate_fast.sh` |
+| `wavelock.sh` | `wave_lock_acquire <tries>` / `wave_lock_release`, sourced by both integrators | |
 | `evocap.py <addr>` | spend and progress cap for `/dqix-evolve`: sums every evolve run's cost from the workflow journals and agent transcripts, and prints `EVOCAP STOP` once the address has spent `EVOCAP_USD` (default 150) or its latest `EVOCAP_FLAT` (default 2) runs found no better best than earlier runs. The workflow's scorer runs it every generation and stops on STOP; `force: true` bypasses it | replayed: stops 021d8ba0 after run 2 of 9 and 020042a8 after run 1; passes 0205faf4, 0219e384, 021d8c30, 02065990, 02061c04 |
 | `countfix.py` | make objdiff count a ROM-exact landing: an absolute pool word gets `module:none` in `relocs.txt`, a Thumb symbol size drops its alignment pad. Default = uncommitted `src/` units, `--since=REV`, `--report`, `--dry-run`, `--restore`. Both landing paths call it; exit 3 means config changed and must be re-gated | 33a3ff65 took the report from 11932 to 11963 functions |
 | `purge_skiplisted.py` | drop skiplisted addresses out of staging before an integration | run clean before every integrate |

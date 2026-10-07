@@ -458,12 +458,7 @@ def function_sizes(mod):
 def main():
     if len(sys.argv) < 2:
         sys.exit("usage: claim.py <main|NNN> [--release <addr> | --status] | --best | --pools")
-    # Modules named in claims/INTEGRATING are being written by finish_wave right now.
     busy = set()
-    try:
-        busy = {l.strip() for l in open(f"{SP}/claims/INTEGRATING", encoding="utf-8") if l.strip()}
-    except OSError:
-        pass
     if sys.argv[1] == "--best":
         p = pools(busy)
         if p:

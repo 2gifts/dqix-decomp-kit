@@ -22,37 +22,15 @@ esac
 # which Windows cleanup deleted whole on 2026-08-24, taking the pipeline with it.
 KIT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && { pwd -W 2>/dev/null || pwd; })"
 SP="$(python "$KIT/kitpaths.py" state)"
-# ONE WAVE AT A TIME. Two recovery passes in the same repo delete each other's files
-# mid-flight (seen: FileNotFoundError in clean() aborting a whole main pass). Serialise.
-LOCK="$SP/wave.lock"
-# ACQUIRE OR REFUSE. The old loop fell through after 900 tries and carried on WITHOUT the lock,
-# then set an EXIT trap that removed the OTHER wave's lock directory -- so the one situation the
-# lock exists to prevent (two waves in one repo deleting each other's files mid-flight) became
-# possible precisely when contention was highest. Never take the trap unless we own the lock.
-_got=0
-for _i in $(seq 1 900); do
-  if mkdir "$LOCK" 2>/dev/null; then echo $$ > "$LOCK/pid"; _got=1; break; fi
-  # STALE LOCK IS NOT CONTENTION. A wave that is killed (or dies on a parse error) leaves the
-  # directory behind, and every later wave then sits here for five hours integrating nothing --
-  # observed 2026-08-20, with staged matches piling up the whole time. Clear a lock whose recorded
-  # owner is gone, or one with no owner recorded that has not been touched for five minutes.
-  _own=$(cat "$LOCK/pid" 2>/dev/null)
-  if [ -n "$_own" ] && ! kill -0 "$_own" 2>/dev/null; then
-    echo "wave.lock owner $_own is dead -- clearing stale lock"
-    rm -f "$LOCK/pid"; rmdir "$LOCK" 2>/dev/null; continue
-  fi
-  if [ -z "$_own" ] && [ -n "$(find "$LOCK" -maxdepth 0 -mmin +5 2>/dev/null)" ]; then
-    echo "wave.lock has no owner and is stale -- clearing"
-    rmdir "$LOCK" 2>/dev/null; continue
-  fi
-  sleep 20
-done
-if [ "$_got" -ne 1 ]; then
+source "$KIT/wavelock.sh"
+if ! wave_lock_acquire 900; then
   echo "REFUSING: $LOCK held by another wave after 5h of waiting; not running unlocked"
   exit 3
 fi
-trap 'rm -f "$LOCK/pid"; rmdir "$LOCK" 2>/dev/null' EXIT
-REPO="$(python "$(cd "$(dirname "${BASH_SOURCE[0]}")" && { pwd -W 2>/dev/null || pwd; })/kitpaths.py" repo)"
+trap wave_lock_release EXIT
+export DQIX_MAIN_REPO="${DQIX_MAIN_REPO:-$(python "$KIT/kitpaths.py" repo)}"
+REPO="$(python "$KIT/integ_tree.py" sync)" || { echo "FATAL: no integration tree"; exit 2; }
+export DQIX_REPO="$REPO"
 cd "$REPO" || { echo "FATAL: no repo"; exit 2; }
 if [ "$OV" = "main" ]; then
   DL="config/usa/arm9/delinks.txt"; SRCDIR=$(python "$KIT/srcdir.py" main); TAGPRE="func_"; LBL="main"
@@ -202,28 +180,16 @@ fi
 H1=$(git rev-parse --short HEAD)
 if [ "$H1" != "$H0" ]; then
   PUSH="PUSH-FAILED"
-  # decomp-matching IS THE ONLY BRANCH THIS PROJECT PUSHES TO. Matched work goes there and nowhere
-  # else. But a hardcoded push is silent when HEAD is somewhere else: on 2026-08-25 another session
-  # left the tree on `fix/clean-clone-build`, our waves committed there, and `git push origin
-  # decomp-matching` pushed the LOCAL decomp-matching ref -- already up to date -- exited 0, and the
-  # wave logged "pushed" while four matched functions stayed local. So REFUSE instead of pushing the
-  # wrong thing: a wave that commits onto the wrong branch is a bug to fix, not a push to redirect.
-  BR=$(git rev-parse --abbrev-ref HEAD)
-  if [ "$BR" != "decomp-matching" ]; then
-    echo "RED: HEAD is on '$BR', not decomp-matching — committed but NOT pushing."
-    echo "     Move the commits onto decomp-matching and push from there."
-    PUSH="REFUSED-wrong-branch($BR)"
-  else
-    for try in 1 2 3; do
-      if git push origin decomp-matching >/tmp/fw_push.log 2>&1; then PUSH="pushed"; break; fi
-      sleep 10   # transient network/lock — retry
-    done
-    # VERIFY THE REMOTE ACTUALLY MOVED. `git push` exits 0 for "Everything up-to-date", so the exit
-    # status alone cannot tell a real push from a no-op.
-    if [ "$PUSH" = "pushed" ] && \
-       [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/decomp-matching 2>/dev/null)" ]; then
-      PUSH="PUSH-DID-NOT-LAND"
-    fi
+  python "$KIT/integ_tree.py" publish > /tmp/fw_push.log 2>&1
+  case $? in
+    0) PUSH="pushed" ;;
+    2) PUSH="pushed-but-main-checkout-behind" ;;
+    *) cat /tmp/fw_push.log ;;
+  esac
+  # git push exits 0 on "Everything up-to-date", so compare refs
+  if [ "$PUSH" != "PUSH-FAILED" ] && \
+     [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/decomp-matching 2>/dev/null)" ]; then
+    PUSH="PUSH-DID-NOT-LAND"
   fi
 else
   PUSH="no-new-commits"
@@ -231,4 +197,5 @@ fi
 
 rm -f build/usa/report.json; ninja report >/dev/null 2>&1
 COV=$(python -c "import json;m=json.load(open('build/usa/report.json'))['measures'];print('%d/%d = %.2f%%'%(m['matched_functions'],m['total_functions'],m['matched_functions_percent']))")
+python "$KIT/integ_tree.py" report
 echo "OK ${LBL}: +${GAINED} delinked (${BEFORE}->${AFTER}), green, sha1 OK, ${PUSH}, cov ${COV}, held ${SP}/hold_${LBL}"

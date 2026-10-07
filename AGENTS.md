@@ -70,12 +70,14 @@ the user asks.
 3. Pass absolute source paths to `wgate.py` and `wdiff.py`; they change into the decomp directory.
 4. A match lands only through `staging/<main|ovNNN>/` and `finish_wave.sh <main|NNN>` (or
    `integrate_fast.sh`). Only a commit that passes `ninja check` proves a match.
-5. One integration at a time. Never run `finish_wave.sh`, `integrate_fast.sh` or `integrate.py`
-   (even `--dry`) while `$SP/wave.lock` exists or `claims/INTEGRATING` names a module.
+5. One integration at a time: `finish_wave.sh` and `integrate_fast.sh` take `$SP/wave.lock`. Never
+   run `integrate.py` (even `--dry`) by hand while it exists. Gating, claiming and sweeping go on
+   during an integration.
 6. Launch integrations as a background task with a long timeout and the command passed plain: no
-   `nohup`, no trailing `&`. They run 10 minutes or more.
-7. `finish_wave.sh` reverts uncommitted changes to tracked files under the decomp's `include/`,
-   `config/` and `src/`. Commit what a match needs first.
+   `nohup`, no trailing `&`.
+7. Integrations run in their own worktree (`python integ_tree.py path`) from the tip of
+   `decomp-matching`, then fast-forward the decomp checkout. Uncommitted edits in the checkout are
+   not part of them: commit what a match needs first.
 8. No hand assembly except addresses in `asm_allow.txt`. No codegen `#pragma`. Nothing in
    `tools/cc_overrides.txt` or `tools/cc_flag_overrides.txt`. A match that needs one of these is a
    diagnosis: find what the source has that the ROM's did not.
