@@ -335,6 +335,17 @@ and calls. That is `arr[k].field = v;` per field, not a `T* p = &arr[k];` (which
 register) and not a `static inline` init (too big: mwcc emits it out of line) (`ov017:021abba8`).
 
 ## SCRATCH REGISTERS (r0-r3, ip, lr) ANSWER ONLY TO OPERAND ORDER
+
+**CHECK THE FUNCTION'S OWN RETURN TYPE, NOT JUST ITS CALLEES** (`ov017:021ce5b4`).
+A scaffold's `void` is a guess: if the target leaves a derived pointer in r0 on
+success and each already-null call result in r0 on early exits, returning that
+pointer can close a scratch-register residue. Two inline nested-member accessors
+preserved the 0x134 adjustment here; changing `void` to `void*`, returning the
+fields pointer, and returning the checked pointer on each null path closed
+REGPERM 17 at the default flags. Literal `return NULL` instead added two redundant
+`moveq r0,#0` instructions. Check the value in r0 on every exit before inferring
+a return contract; a forced diagnostic object is not evidence of a source match.
+
 A scratch-register swap in the diff is fixed by swapping the operands of the commutative operation
 that feeds it (`pad/probe_scratch.cpp`):
 
