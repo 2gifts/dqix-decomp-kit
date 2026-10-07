@@ -48,7 +48,7 @@ def _mwcc_defines(configure):
             if isinstance(target, ast.Name) and target.id == "region_defines":
                 value = eval(compile(ast.Expression(node.value), path, "eval"), configure.__dict__)
                 return value.replace("$game_version", REGION)
-    raise SystemExit(f"{path} does not compute region_defines for the mwcc rule")
+    return f"-d {REGION}"
 
 
 _cfg = _load()
