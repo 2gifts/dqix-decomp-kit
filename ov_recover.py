@@ -11,6 +11,7 @@ import kitpaths as _kp
 # assumptions drifted apart and silently dropped 28 of 31 gate-verified matches. Never fork this.
 import re, subprocess, os, sys, glob, time, shutil, hashlib
 import srcdir
+import culprits
 # The scratchpad is wherever THIS file lives; the old absolute %TEMP% path was deleted by Windows
 # cleanup on 2026-08-24 and took the whole pipeline with it.
 SP = _kp.SP
@@ -596,7 +597,7 @@ def prune_unwired():
 # reloc-false-matches (pass the masked per-func gate, FAIL the overlay checksum), the full set gates red
 # and naive bisection does O(N) gates = HOURS. Cap the gates/wave; beyond it, defer the remainder WITHOUT
 # striking (they weren't fairly isolated). Genuine matches beyond the cap just wait for the next wave.
-GATES=[0]; MAXGATES=int(os.environ.get("MAXGATES","16")); faildefer=[]; drifted=[]
+GATES=[0]; MAXGATES=int(os.environ.get("MAXGATES","16")); faildefer=[]; drifted=[]; named_bad=[]
 # When set, a single-func red gate defers WITHOUT recording a strike. Used for the drift pass, where the
 # candidates are already known byte-exact and reloc-verified — a red there is a link interaction, not a
 # bad match, and striking it would permanently write off good work.
@@ -697,6 +698,19 @@ def recurse(addrs):
     # gate_culprits). Dropping them and re-gating costs 1 more build and saves the whole bisection.
     # The set strictly shrinks each time, so this cannot loop. Falls back to bisection if the log
     # names nothing (or blames everything), so no failure mode loses its old handling.
+    try:
+        _log = open(f"{SP}/wlog/gate_{SUF}.txt", encoding='utf-8', errors='ignore').read()
+    except OSError:
+        _log = ""
+    named = sorted({a for m, a, _p, _w in culprits.name(_log)
+                    if m == ("main" if MAIN else OV) and a in addrs})
+    if named:
+        keep = [a for a in addrs if a not in named]
+        skipped.extend(named); clean()
+        (named_bad if NO_STRIKE[0] else faildefer).extend(named)
+        print(f"  named-cull {len(named)} {named[:4]} -> re-gate {len(keep)}")
+        recurse(keep)
+        return
     cul = gate_culprits(addrs)
     if cul and len(cul) < len(addrs):
         keep = [a for a in addrs if a not in cul]
@@ -856,6 +870,7 @@ open(f"{SP}/wlog/faildefer_{SUF}.txt","w").write('\n'.join(sorted(set(faildefer)
 # a bad match — it conflicts with whatever is currently committed — so it must keep its held source and
 # get retried, just not on the very next main set where it would re-poison the same build.
 for _a in set(drifted) - done_final: _park.setdefault(_a, 1)
+for _a in set(named_bad) - done_final: _park[_a] = 4
 open(_DRIFTF, "w").write('\n'.join(f"{a} {n}" for a, n in sorted(_park.items()) if n > 0))
 if drifted: print(f"  drift culprits parked: {sorted(set(drifted)-done_final)}")
 # Prune held copies of funcs that are now COMMITTED — git is the source of truth for those, and the hold

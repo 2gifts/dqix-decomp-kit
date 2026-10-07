@@ -1724,6 +1724,37 @@ def _finish_bulk_snapshot_behaviour():
             return "bulk loader did not run exactly one Git query"
 
 
+@check("a red build log names its culprit for every attributable failure class",
+       "only layout drift was parsed, so a duplicate symbol, compile error, undefined reference or "
+       "malformed config line sent the wave into sequential full-ROM bisection")
+def _culprits_from_red_logs():
+    c = load("culprits")
+    mwld = ".\\tools\\mwccarm\\2.0\\sp2p2\\mwldarm.exe: "
+    cands = {"src/Combat/Overlay_28/func_ov028_021d9494.cpp": ("028", "021d9494"),
+             "src/Combat/Overlay_0/ProcessCombatTurn_0215d63c.cpp": ("000", "0215d63c"),
+             "src/Combat/Overlay_17/func_ov017_021d4e38.cpp": ("017", "021d4e38"),
+             "src/Combat/Main/ReinitController02043204.cpp": ("main", "02043204"),
+             "src/Combat/Main/Innocent_02000c9c.cpp": ("main", "02000c9c")}
+    logs = {
+        "021d9494": mwld + 'Multiply-defined: "func_ov028_021d9494"\n' + mwld + "in Committed_021d9494.o\n"
+                    + mwld + "Previously defined in\n" + mwld + "func_ov028_021d9494.o\n",
+        "0215d63c": "src\\Combat\\Overlay_0\\ProcessCombatTurn_0215d63c.cpp:726: undefined label 'L_0da4'\n",
+        "021d4e38": mwld + "Linker command file error at line 10100\n" + mwld + "File not found: func_ov017_021d4e38.o\n",
+        "02043204": mwld + "Undefined :\n" + mwld + '"ReinitController02043204(MessageWork*)"\n'
+                    + mwld + 'Referenced from "Committed_02050000"\n' + mwld + "in Committed_02050000.o\n",
+    }
+    for want, log in logs.items():
+        got = [a for _m, a, _p, _w in c.name(log + mwld + 'warning: The name "Innocent_02000c9c" was reused\n', cands)]
+        if got != [want]:
+            return f"{want}: named {got}"
+    drift = "Symbol 'func_ov017_021d4e38' is expected to be at 0x021d4e38 but is at 0x00000010\n"
+    if [a for _m, a, _p, _w in c.name(drift, cands)] != ["021d4e38"]:
+        return "an unplaced object was not named"
+    shifted = "Symbol 'x' is expected to be at 0x021d4e38 but is at 0x021d4e40\n"
+    if c.name(shifted, cands):
+        return "a shifted symbol blamed its own function instead of falling back to the boundary scan"
+
+
 STAMP = f"{SP}/wlog/functional_stamp.txt"
 
 

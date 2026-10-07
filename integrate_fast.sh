@@ -12,13 +12,19 @@
 # best case one build instead of ten, worst case one wasted build then the old path unchanged.
 KIT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && { pwd -W 2>/dev/null || pwd; })"
 SP="$(python "$KIT/kitpaths.py" state)"
-REPO="$(python "$(cd "$(dirname "${BASH_SOURCE[0]}")" && { pwd -W 2>/dev/null || pwd; })/kitpaths.py" repo)"
 LOG="$SP/wlog/integrate_fast.log"
+source "$KIT/wavelock.sh"
+if ! wave_lock_acquire 1; then
+  echo "REFUSING: $LOCK held by another integration" | tee -a "$LOG"; exit 3
+fi
+export DQIX_MAIN_REPO="${DQIX_MAIN_REPO:-$(python "$KIT/kitpaths.py" repo)}"
+REPO="$(python "$KIT/integ_tree.py" sync)" || { wave_lock_release; echo "FATAL: no integration tree"; exit 2; }
+export DQIX_REPO="$REPO"
 # ONE TERMINAL LINE ON EVERY EXIT PATH. There are nine `exit`s below and any of them can be the last
 # thing that happens. A watcher greping for one success word goes silent on the other eight, and that
 # silence is indistinguishable from "still running" -- it read as a live integration for 36 minutes on
 # 2026-09-09 while nothing was running. Silence must not be a possible outcome of this script.
-_final() { local rc=$?; echo "$(date '+%H:%M') INTEGRATE-END rc=$rc" | tee -a "$LOG"; }
+_final() { local rc=$?; wave_lock_release; echo "$(date '+%H:%M') INTEGRATE-END rc=$rc" | tee -a "$LOG"; }
 trap _final EXIT
 cd "$REPO" || exit 2
 
@@ -179,7 +185,7 @@ if [ "$green" = "1" ]; then
       -m "Match $landed functions across $placed modules" >> "$LOG" 2>&1 || {
     echo "$(date '+%H:%M') COMMIT FAILED -- staging kept" | tee -a "$LOG"; exit 5; }
   _before=$(git rev-parse origin/decomp-matching 2>/dev/null)
-  git push -q >> "$LOG" 2>&1
+  python "$KIT/integ_tree.py" publish >> "$LOG" 2>&1
   _after=$(git rev-parse origin/decomp-matching 2>/dev/null)
   if [ "$_before" = "$_after" ]; then
     echo "$(date '+%H:%M') GREEN: $landed functions, $placed modules, COMMITTED BUT NOT PUSHED" \
@@ -205,6 +211,7 @@ if [ "$green" = "1" ]; then
       | tee -a "$LOG"
   fi
   ninja report >/dev/null 2>&1 || echo "$(date '+%H:%M') WARN ninja report failed -- cov is stale" | tee -a "$LOG"
+  python "$KIT/integ_tree.py" report
   python "$KIT/cov.py" | tee -a "$LOG"
   exit 0
 fi
@@ -216,6 +223,15 @@ echo "$(date '+%H:%M') RED on the combined build -- rolling back, falling back t
 cp /tmp/if_check.log "$SP/wlog/if_check_$(date '+%m%d_%H%M').log" 2>/dev/null
 grep -aE "expected to be at|error:|ERROR|undefined|not found|FAILED" /tmp/if_check.log | tail -12 >> "$LOG"
 tail -5 /tmp/if_check.log >> "$LOG"
+_round=${INTEGRATE_FAST_ROUND:-0}
+if [ "$_round" -lt 3 ] && python "$KIT/culprits.py" /tmp/if_check.log --cull >> "$LOG" 2>&1; then
+  git checkout -- config/ src/ >> "$LOG" 2>&1
+  git clean -fdq src/ >> "$LOG" 2>&1
+  echo "$(date '+%H:%M') culled the culprits the log names to hold_<mod>; rebuilding the rest" | tee -a "$LOG"
+  wave_lock_release
+  INTEGRATE_FAST_ROUND=$((_round + 1)) exec bash "$KIT/integrate_fast.sh"
+fi
 git checkout -- config/ src/ >> "$LOG" 2>&1
 git clean -fdq src/ >> "$LOG" 2>&1      # remove the copies this script made; staging still holds them
+wave_lock_release
 exec bash "$KIT/integrate_all.sh"
