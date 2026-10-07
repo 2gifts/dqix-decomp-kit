@@ -62,26 +62,10 @@ for M in $MODS; do
   # the strike bookkeeping has been wrong before (30 byte-exact functions were permanently written off
   # that way). Free to re-test: classify runs locally at ~0.3s/func with no build, so a genuinely bad
   # func is dropped before it can cost a single gate.
-  NOSKIP=1 MAXGATES=24 python "$KIT/ov_recover.py" "$M" >> "$LOG" 2>&1
-  # ov_recover gates `ninja check` but does NOT build the ROM or verify the checksum — finish_wave.sh
-  # normally does that. Recovery commits are real commits, so they get the same full proof.
-  if ! ninja rom >/dev/null 2>&1 || ! ninja sha1 2>&1 | grep -q "OK"; then
-    echo "  $M: SHA1/ROM FAILED after recovery -> reverting last commit" >> "$LOG"
-    git reset --hard HEAD~1 >/dev/null 2>&1
-    python tools/configure.py usa --no-extract >/dev/null 2>&1
-    continue
-  fi
-  echo "  $M: green + sha1 OK" >> "$LOG"
+  NOSKIP=1 MAXGATES=24 bash "$KIT/finish_wave.sh" "$M" > "$SP/wlog/sweep_$M.log" 2>&1
+  echo "  $M: $(tail -1 "$SP/wlog/sweep_$M.log")" >> "$LOG"
 done
 
-# push once at the end (one push for the whole sweep, not one per module)
-if [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/decomp-matching 2>/dev/null)" ]; then
-  for t in 1 2 3; do
-    git push origin decomp-matching >/dev/null 2>&1 && { echo "pushed" >> "$LOG"; break; }
-    sleep 20
-  done
-fi
-rm -f build/usa/report.json; ninja report >/dev/null 2>&1
 # fail-soft: a missing/short report must never make the sweep look like it errored — run_all reads the
 # exit code of the last command, and a bare `python -c` that raises would report a failed sweep after
 # a run that actually committed everything it found.
