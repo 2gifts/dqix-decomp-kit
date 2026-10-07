@@ -83,17 +83,56 @@ if "quarantine" not in STAGING: STAGING = list(STAGING) + ["quarantine"]
 # preserves untracked src/ into hold_<mod>. Listed last for the same reason hold_ is.
 if f"gated/{SUF}" not in STAGING: STAGING = list(STAGING) + [f"gated/{SUF}"]
 
-def sh(*a): return subprocess.run(list(a), capture_output=True, text=True)
+_TRACKED = None
+_INDEX_MUTATORS = frozenset(("add", "reset", "checkout", "commit", "rm", "mv",
+                             "read-tree", "update-index"))
+
+def sh(*a):
+    global _TRACKED
+    # Invalidate before attempting a write: even failed Git commands may change the index.
+    if len(a) > 1 and a[0] == "git" and a[1] in _INDEX_MUTATORS:
+        _TRACKED = None
+    argv = list(a)
+    if argv and argv[0] == "python":
+        argv[0] = sys.executable  # reuse this interpreter and its installed dependencies
+    return subprocess.run(argv, capture_output=True, text=True)
+
+def repo_relative_path(path):
+    root = os.path.normcase(os.path.abspath(REPO))
+    try:
+        path = os.fspath(path).replace("\\", "/")
+        full = os.path.normcase(os.path.abspath(path if os.path.isabs(path)
+                                              else os.path.join(root, path)))
+        if os.path.commonpath((root, full)) != root:
+            return None
+        return os.path.relpath(full, root).replace("\\", "/")
+    except (TypeError, ValueError, OSError):
+        return None
+
+def read_tracked_paths():
+    r = subprocess.run(["git", "ls-files", "--cached", "-z"], capture_output=True)
+    if r.returncode != 0:
+        raise RuntimeError("FATAL: cannot read tracked paths; no cleanup permitted: "
+                           + r.stderr.decode("utf-8", "replace")[:300])
+    if r.stdout and not r.stdout.endswith(b"\0"):
+        raise RuntimeError("FATAL: truncated tracked-path snapshot; no cleanup permitted")
+    paths = set()
+    for raw in r.stdout.split(b"\0"):
+        if not raw:
+            continue
+        normalized = repo_relative_path(raw.decode("utf-8", "surrogateescape"))
+        if normalized is None:
+            raise RuntimeError("FATAL: unsafe tracked path; no cleanup permitted")
+        paths.add(normalized)
+    return paths
+
 def tracked(path):
-    # FAIL SAFE. clean() deletes every file this says is untracked, so a transient git
-    # failure (index.lock contention, a killed wave, git busy) used to mean "untracked"
-    # and wiped COMMITTED sources -- 2044 of them in one interrupted run. Anything other
-    # than a clean "not tracked" answer must be treated as tracked, i.e. never deleted.
-    r = sh("git", "ls-files", "--error-unmatch", path)
-    if r.returncode == 0:
-        return True
-    err = ((r.stderr or "") + (r.stdout or "")).lower()
-    return "did not match any file" not in err
+    global _TRACKED
+    if _TRACKED is None:
+        # Publish only a successful complete snapshot. Errors leave the cache invalid.
+        _TRACKED = read_tracked_paths()
+    normalized = repo_relative_path(path)
+    return normalized is None or normalized in _TRACKED
 
 def clean():
     # restore ALL committed config + src + include + headers to HEAD (a worker may edit ANY
@@ -172,7 +211,10 @@ def gate():
         try: os.remove(p)
         except OSError: pass
     sweep_foreign()
-    cf = sh("python", "tools/configure.py", "usa", "--no-extract")
+    configure_args = ["python", "tools/configure.py", "usa", "--no-extract"]
+    if os.environ.get("DQIX_PREINSTALLED_COMPILER"):
+        configure_args += ["--compiler", os.environ["DQIX_PREINSTALLED_COMPILER"]]
+    cf = sh(*configure_args)
     # MAIN-ONLY PREFLIGHT (~free: `ninja check` depends on `ninja delink` anyway, so this only pulls
     # that step forward). A new main delink entry re-splits one of dsd's gap modules, and a module
     # whose symbol sizes sum past its section size makes mwldarm abort with a message naming neither
@@ -492,7 +534,7 @@ def try_set(addrs):
     clean()
     # Snapshot what is ALREADY dirty -- a live worker's edits to committed sources -- so the clobber
     # guard can tell them from anything this wave writes.
-    global _DIRTY_BASE
+    global _DIRTY_BASE, _TRACKED
     _DIRTY_BASE = dirty_tracked()
     place(addrs)
     for o in glob.glob(f"{SRCDIR}/*.o"): os.remove(o)
@@ -507,11 +549,16 @@ def try_set(addrs):
         print(f"  DBG-TAG {os.path.basename(_u[0])} hasUSA={chr(47)+chr(47)+chr(32)}USA: "
               f"{TAGPRE} in _tx -> {(chr(47)+chr(47)+chr(32)+chr(85)+chr(83)+chr(65)+chr(58)+chr(32)+TAGPRE) in _tx}")
     _r = sh("python", INT, *INTARGS)
+    _TRACKED = None   # delegated integrator is a mutation boundary
     try:
         with open(f"{SP}/wlog/integ_{SUF}.txt", "w", encoding="utf-8") as _fh:
             _fh.write((_r.stdout or "") + (_r.stderr or ""))
     except Exception:
         pass
+    if _r.returncode != 0:
+        raise RuntimeError(f"FATAL: delegated integrator exited {_r.returncode}; "
+                           f"gate not run; preserved candidates remain in {HOLD}; "
+                           f"see {SP}/wlog/integ_{SUF}.txt")
     # A COMMITTED source carrying an unwired `// USA:` tag is a pending candidate by design, so
     # autorepair rewrites it -- and when the verdict is OVERGEN or BYTEDIFF the edit stays behind and
     # the clobber guard blames THIS wave's byte-exact matches for it. main had six such files and

@@ -1503,7 +1503,241 @@ def sweep_fingerprint():
     return h.hexdigest()
 
 
+
+@check("recovery delegates Python to the current interpreter and can import its ELF dependency",
+       "native Windows child lookup selected a different Python and crashed integrate.py before mutation")
+def _recovery_python_interpreter():
+    import ast
+    import subprocess
+    from types import SimpleNamespace
+    tree = ast.parse(open(f"{KIT}/ov_recover.py", encoding="utf-8").read())
+    nodes = [n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name == "sh"]
+    if len(nodes) != 1: return "shared recovery launcher missing"
+    ns = {"sys":sys,"subprocess":subprocess,"_TRACKED":None,"_INDEX_MUTATORS":frozenset()}
+    exec(compile(ast.Module(body=nodes,type_ignores=[]),"recovery-launcher","exec"),ns)
+    code = "import json,sys,elftools; from elftools.elf.elffile import ELFFile; print(json.dumps({'executable':sys.executable,'prefix':sys.prefix,'elftools':elftools.__file__}))"
+    result = ns["sh"]("python","-c",code)
+    if result.returncode: return "selected interpreter cannot import ELF dependency: " + result.stderr[-300:]
+    proof = json.loads(result.stdout)
+    normalize = lambda path: os.path.normcase(os.path.abspath(path))
+    if normalize(proof["executable"]) != normalize(sys.executable):
+        return "delegated Python differs from parent"
+    if normalize(proof["prefix"]) != normalize(sys.prefix): return "delegated environment differs"
+    if os.path.commonpath((normalize(sys.prefix),normalize(proof["elftools"]))) != normalize(sys.prefix):
+        return "ELF dependency loaded outside selected environment"
+    calls = []
+    ns["subprocess"] = SimpleNamespace(run=lambda argv,**kwargs: calls.append((argv,kwargs)))
+    for command in (("git","status","--porcelain"),("ninja","check"),(sys.executable,"-V")):
+        ns["sh"](*command)
+        if calls[-1] != (list(command),{"capture_output":True,"text":True}):
+            return "non-bare-Python command changed: " + repr(command)
+
+@check("delegated integrator startup failure stops before gate while preserving source snapshots",
+       "try_set ignored a nonzero integrator exit and ran an expensive gate or quiet-green wave")
+def _delegated_failure_stops_gate():
+    import ast
+    import subprocess
+    import shutil
+    src = open(f"{KIT}/ov_recover.py", encoding="utf-8").read()
+    tree = ast.parse(src)
+    wanted = {"sh","try_set"}
+    nodes = [n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name in wanted]
+    if {n.name for n in nodes} != wanted: return "launcher/try_set missing"
+    os.makedirs(f"{SP}/handwork",exist_ok=True)
+    root = tempfile.mkdtemp(prefix="delegate_regress_",dir=f"{SP}/handwork")
+    source,hold,stage = (os.path.join(root,name) for name in ("src","hold_main","staging"))
+    for directory in (source,hold,stage,os.path.join(root,"wlog")): os.makedirs(directory)
+    candidate = b"// USA: func_02000000\nvoid func_02000000() {}\n"
+    for directory in (hold,stage):
+        with open(os.path.join(directory,"candidate.cpp"),"wb") as out: out.write(candidate)
+    events = []
+    def place(addrs):
+        events.append("place")
+        shutil.copyfile(os.path.join(hold,"candidate.cpp"),os.path.join(source,"candidate.cpp"))
+    def gate():
+        events.append("gate")
+        return True
+    ns = {"sys":sys,"os":os,"glob":__import__("glob"),"re":re,"subprocess":subprocess,
+          "_TRACKED":{"stale"},"_INDEX_MUTATORS":frozenset(),"clean":lambda:events.append("clean"),
+          "dirty_tracked":lambda:set(),"place":place,"tracked":lambda path:True,"gate":gate,
+          "committed_addrs":lambda:set(),"REPO":root,"SRCDIR":source,"SP":root,"HOLD":hold,
+          "SUF":"main","TAGPRE":"func_","INTARGS":[],"INT":os.path.join(root,"delegate.py")}
+    exec(compile(ast.Module(body=nodes,type_ignores=[]),"try-set-regression","exec"),ns)
+    with open(ns["INT"],"w") as out: out.write("import dqix_intentionally_missing_startup_dependency\n")
+    try:
+        ns["try_set"](["02000000"])
+    except RuntimeError as exc:
+        if "delegated integrator exited" not in str(exc): return "failure lacks visible diagnostic"
+    else:
+        return "startup failure did not abort"
+    if "gate" in events or ns["_TRACKED"] is not None: return "startup failure reached gate or retained stale cache"
+    log = open(os.path.join(root,"wlog","integ_main.txt")).read()
+    if "ModuleNotFoundError" not in log: return "startup traceback not preserved"
+    for directory in (source,hold,stage):
+        if open(os.path.join(directory,"candidate.cpp"),"rb").read() != candidate:
+            return "startup failure lost source snapshot"
+    events.clear()
+    with open(ns["INT"],"w") as out: out.write("print('REPAIR per-candidate rejection; other candidates remain valid')\n")
+    if ns["try_set"](["02000000"]) is not True or events.count("gate") != 1:
+        return "ordinary rc0 partial/rejected candidates no longer reach gate"
+    if "REPAIR per-candidate rejection" not in open(os.path.join(root,"wlog","integ_main.txt")).read():
+        return "ordinary integrator output not preserved"
+    for directory in (source,hold,stage):
+        if open(os.path.join(directory,"candidate.cpp"),"rb").read() != candidate:
+            return "rc0 changed source snapshots"
+
+@check("recovery tracked snapshots are batch, fail closed and refresh after index writes",
+       "per-file Git made Windows waves spend minutes scanning; stale/failed caches could delete committed source")
+def _tracked_snapshot_behaviour():
+    import ast
+    from types import SimpleNamespace
+    src = open(f"{KIT}/ov_recover.py", encoding="utf-8").read()
+    tree = ast.parse(src)
+    wanted = {"sh", "repo_relative_path", "read_tracked_paths", "tracked"}
+    nodes = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in wanted]
+    if {n.name for n in nodes} != wanted:
+        return "tracked snapshot functions missing"
+    paths = {f"src/Combat/Main/f{i}.cpp" for i in range(4000)} | {"src/Combat/Main/has space.cpp"}
+    reads = [0]
+    fail = [False]
+    truncated = [False]
+    def run(args, **kwargs):
+        if args[:2] == ["git", "ls-files"]:
+            reads[0] += 1
+            payload = ("\0".join(sorted(paths)) + "\0").encode() if paths else b""
+            return SimpleNamespace(returncode=128 if fail[0] else 0, stdout=payload[:-1] if truncated[0] else payload, stderr=b"simulated Git error")
+        if args[:2] == ["git", "add"]:
+            paths.add("src/Combat/Main/new.cpp")
+        if args[:2] == ["git", "reset"]:
+            paths.discard("src/Combat/Main/new.cpp")
+        return SimpleNamespace(returncode=128 if fail[0] else 0, stdout="", stderr="")
+    os.makedirs(f"{SP}/handwork", exist_ok=True)
+    root = tempfile.mkdtemp(prefix="tracked_regress_", dir=f"{SP}/handwork")
+    mutators = [n for n in tree.body if isinstance(n,ast.Assign)
+                and any(isinstance(t,ast.Name) and t.id == "_INDEX_MUTATORS" for t in n.targets)]
+    if len(mutators) != 1: return "index mutation policy missing"
+    nodes = mutators + nodes
+    ns = {"os":os, "sys":sys, "REPO":root, "subprocess":SimpleNamespace(run=run), "_TRACKED":None}
+    exec(compile(ast.Module(body=nodes,type_ignores=[]), "tracked-regression", "exec"), ns)
+    for _ in range(2):
+        for path in paths:
+            if not ns["tracked"](path): return "tracked path became untracked"
+    if reads[0] != 1: return "membership still starts per-file Git"
+    if not ns["tracked"](os.path.join(root,"src","Combat","Main","has space.cpp")):
+        return "absolute/space path mismatch"
+    if not ns["tracked"]("src\\Combat\\Main\\has space.cpp"):
+        return "Windows slash alias mismatch"
+    if not ns["tracked"]("../outside.cpp"): return "out-of-repo path not protected"
+    if ns["tracked"]("src/Combat/Main/new.cpp"): return "untracked candidate protected as tracked"
+    ns["sh"]("git","add","-A")
+    if not ns["tracked"]("src/Combat/Main/new.cpp") or reads[0] != 2:
+        return "newly staged source is not protected after refresh"
+    for command in ("checkout","reset","commit","rm","mv","read-tree","update-index"):
+        ns["sh"]("git",command)
+        if ns["_TRACKED"] is not None: return "index mutation did not invalidate: " + command
+        if ns["tracked"]("src/Combat/Main/new.cpp") != ("src/Combat/Main/new.cpp" in paths):
+            return "membership did not refresh after " + command
+    fail[0] = True
+    ns["sh"]("git","reset")       # unsuccessful write must invalidate too
+    removals = []
+    try:
+        if not ns["tracked"]("src/Combat/Main/new.cpp"): removals.append("new.cpp")
+    except RuntimeError:
+        pass
+    else:
+        return "failed/partial snapshot did not stop destructive phase"
+    if removals or ns["_TRACKED"] is not None: return "failed snapshot published/reused a set"
+    fail[0] = False
+    truncated[0] = True
+    try:
+        ns["tracked"]("src/Combat/Main/new.cpp")
+    except RuntimeError:
+        pass
+    else:
+        return "successful-but-truncated snapshot did not fail closed"
+    if ns["_TRACKED"] is not None: return "truncated snapshot published a set"
+    truncated[0] = False
+    paths.clear()
+    if ns["tracked"]("src/empty.cpp"): return "successful empty index was not accepted"
+    if '_r = sh("python", INT, *INTARGS)\n    _TRACKED = None' not in src:
+        return "delegated mutation boundary no longer invalidates"
+
+@check("finish_wave bulk index snapshot preserves tracked paths and fails closed before quarantine",
+       "failed, unreadable or truncated snapshots could quarantine tracked source")
+def _finish_bulk_snapshot_behaviour():
+    import subprocess
+    import shutil
+    src = open(f"{KIT}/finish_wave.sh", encoding="utf-8").read()
+    first = src.find("# BULK-TRACKED-BEGIN")
+    last = src.find("# BULK-TRACKED-END")
+    if first < 0 or last < first: return "bulk snapshot block missing"
+    stop = src.find("# 5. STAGING", last)
+    if stop < last: return "duplicate loop boundary missing"
+    duplicate_phase = src[first:stop]
+    addr_begin = src.find("addr_of() {")
+    addr_end = src.find("# 4. QUARANTINE", addr_begin)
+    if addr_begin < 0 or addr_end < addr_begin: return "address reader missing"
+    address_reader = src[addr_begin:addr_end]
+    if 'git ls-files --error-unmatch "$f"' in src: return "per-file Git query remains"
+    bash = "C:/Program Files/Git/bin/bash.exe" if os.name == "nt" else shutil.which("bash")
+    if not bash: return "bash unavailable for behavioural snapshot test"
+    for mode in ("valid","empty","git-error","missing","unreadable","truncated","load-error"):
+        os.makedirs(f"{SP}/handwork", exist_ok=True)
+        root = tempfile.mkdtemp(prefix="fw_snapshot_",dir=f"{SP}/handwork").replace("\\","/")
+        source = os.path.join(root,"src","Combat","Main")
+        q = os.path.join(root,"quarantine")
+        os.makedirs(source)
+        os.makedirs(q)
+        for filename, addr in (("has space.cpp","02000000"),("duplicate.cpp","02000000"),("new.cpp","02000001")):
+            with open(os.path.join(source,filename),"w") as out:
+                out.write("// USA: func_" + addr + "\n")
+        with open(os.path.join(q,".done_main"),"w") as out: out.write("02000000\n")
+        body = 'cd "$1" || exit 99; SP="$1/state"; Q="$1/quarantine"; OV=main; TAGPRE=func_; SRCDIR="src/Combat/Main"; calls="$1/calls"\n'
+        # Record actual quarantine moves without changing their arguments or result.
+        body += 'mv() { printf "%s\\n" "$1" >> "$SP/../moves"; command mv "$@"; }\n'
+        body += 'git() { echo x >> "$calls"; '
+        if mode != "empty":
+            body += 'printf "src/Combat/Main/has space.cpp' + ('"; ' if mode == "truncated" else '\\0"; ')
+        if mode == "missing": body += 'rm -f "$_tracked_tmp"; '
+        if mode == "unreadable": body += 'rm -f "$_tracked_tmp"; mkdir "$_tracked_tmp"; '
+        body += 'return ' + ('128' if mode == "git-error" else '0') + '; }\n'
+        if mode == "load-error": body += 'mapfile() { return 1; }\n'
+        body += address_reader + duplicate_phase + '\n'
+        body += 'echo safe > "$1/phase-entered"\n'
+        r = subprocess.run([bash,"--noprofile","--norc","-c",body,"snapshot-test",root],capture_output=True,text=True)
+        entered = os.path.isfile(root + "/phase-entered")
+        success = mode in ("valid","empty")
+        if success and (r.returncode != 0 or not entered):
+            return mode + " snapshot failed: " + r.stderr[-200:]
+        if not success and (r.returncode != 6 or entered):
+            return mode + " snapshot reached destructive phase"
+        expected = {"duplicate.cpp"} if mode == "valid" else ({"duplicate.cpp","has space.cpp"} if mode == "empty" else set())
+        actual = {name for name in os.listdir(q) if name.endswith(".cpp")}
+        if actual != expected: return mode + " quarantined wrong sources: " + repr(actual)
+        remaining = {name for name in os.listdir(source) if name.endswith(".cpp")}
+        if remaining != {"duplicate.cpp","has space.cpp","new.cpp"} - expected:
+            return mode + " did not preserve source inputs"
+        moves_path = root + "/moves"
+        moves = open(moves_path).read().splitlines() if os.path.isfile(moves_path) else []
+        if len(moves) != len(expected): return mode + " unexpected move calls"
+        if len(open(root + "/calls").read().splitlines()) != 1:
+            return "bulk loader did not run exactly one Git query"
+
+
 STAMP = f"{SP}/wlog/functional_stamp.txt"
+
+
+@check("gate and differ use external state and fail closed on snapshot errors",
+       "kit-relative snapshots were invisible to state pools and failed copies still reported MATCH")
+def _external_gate_state():
+    gate = open(f"{KIT}/wgate.py", encoding="utf-8").read()
+    diff = open(f"{KIT}/wdiff.py", encoding="utf-8").read()
+    if 'SCR=f"{_kp.SP}/handwork/compile"' not in gate or 'SCR = f"{_kp.SP}/handwork/compile"' not in diff:
+        return "compiler scratch is not in external state"
+    if 'f"{_kp.SP}/gated/"' not in gate or 'PRESERVATION-FAILED' not in gate:
+        return "gate does not preserve to external state with a visible failure"
+    if 'os.replace(_tmp,' not in gate or 'ELFFile(io.BytesIO(_fh.read()))' not in diff:
+        return "snapshot publication is not atomic or differ retains an open object handle"
 
 if __name__ == "__main__":
     slow = "--slow" in sys.argv

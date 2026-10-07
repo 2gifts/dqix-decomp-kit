@@ -10,10 +10,9 @@ import subprocess, re, sys, os
 from elftools.elf.elffile import ELFFile
 import residue, gatelog, buildcfg
 REPO = _kp.REPO
-# The scratchpad is wherever THIS file lives. It used to be an absolute path under %TEMP%, which
-# Windows cleanup deleted whole on 2026-08-24 and took the pipeline with it; a self-relative root
-# also means a moved scratchpad never needs the hardcoded path edited in 40 scripts again.
-SCR=os.path.dirname(os.path.abspath(__file__)).replace(chr(92), "/")
+# Compiler scratch and proven candidates belong to external state, never the checkout.
+SCR=f"{_kp.SP}/handwork/compile"
+os.makedirs(SCR, exist_ok=True)
 CC=buildcfg.CC
 
 # Per-file compiler override (tools/cc_overrides.txt, same table the build reads).
@@ -310,11 +309,14 @@ if wrong:
 # pipeline where a match is PROVEN, so copy the exact bytes that proved it, immediately.
 try:
     import shutil as _sh
-    _d = f"{SCR}/gated/" + ("main" if OV == "main" else f"ov{OV}")
+    _d = f"{_kp.SP}/gated/" + ("main" if OV == "main" else f"ov{OV}")
     os.makedirs(_d, exist_ok=True)
-    _sh.copy2(SRC, f"{_d}/{ADDR}.cpp")
-except Exception:
-    pass          # never let bookkeeping turn a real MATCH into a failure
+    _tmp = f"{_d}/{ADDR}.{os.getpid()}.tmp"
+    _sh.copy2(SRC, _tmp)
+    os.replace(_tmp, f"{_d}/{ADDR}.cpp")
+except OSError as _e:
+    print(f"PRESERVATION-FAILED: {_e}")
+    sys.exit(1)
 # ALREADY COMMITTED IS NOT A FRESH MATCH. This compiles a file and compares bytes; it never asked
 # whether that address is already delinked, so a source for work already in the repo reported MATCH
 # exactly like new work. staging/ therefore filled with duplicates that looked like pending wins --
