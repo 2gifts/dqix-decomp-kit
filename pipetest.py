@@ -29,6 +29,7 @@ import re
 import subprocess
 import sys
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 
 SP = _kp.SP
 KIT = _kp.KIT
@@ -36,11 +37,15 @@ REPO = _kp.REPO
 SRC = f"{REPO}/src/Combat/Main"
 
 
-def gate(addr, path):
+def gate_run(addr, path, state):
+    return subprocess.run([sys.executable, f"{KIT}/wgate.py", "main", addr, path],
+                          env={**os.environ, "DQIX_STATE": state, "WGATE_ALLOW_COMMITTED": "1"},
+                          capture_output=True, text=True, cwd=REPO)
+
+
+def gate(addr, path, state):
     """Last line of wgate for one candidate."""
-    r = subprocess.run([sys.executable, f"{KIT}/wgate.py", "main", addr, path],
-                       env={**os.environ, "WGATE_ALLOW_COMMITTED": "1"},
-                       capture_output=True, text=True, cwd=REPO)
+    r = gate_run(addr, path, state)
     out = (r.stdout or r.stderr).strip().splitlines()
     return out[-1] if out else "(no output)"
 
@@ -106,11 +111,19 @@ def main():
     if not samples:
         sys.exit("no committed non-asm sources found to test against")
     passed = failed = holes = 0
+    os.makedirs(f"{SP}/handwork", exist_ok=True)
+    state = tempfile.mkdtemp(prefix="pipetest_", dir=f"{SP}/handwork")
 
     for addr, path, txt in samples:
-        verdict = gate(addr, path)
+        verdict = gate(addr, path, state)
         if verdict == "MATCH":
             passed += 1
+            saved = os.path.join(state, "gated", "main", addr + ".cpp")
+            if not os.path.isfile(saved) or open(saved, "rb").read() != open(path, "rb").read():
+                failed += 1
+                print(f"REGRESSION  {addr} exact external snapshot missing")
+            else:
+                passed += 1
         else:
             failed += 1
             print(f"REGRESSION  {addr} committed source no longer gates: {verdict[:80]}")
@@ -120,10 +133,10 @@ def main():
             if not made:
                 continue
             broken, want = made
-            tmp = os.path.join(tempfile.gettempdir(), f"pipetest_{addr}.cpp")
+            tmp = os.path.join(state, f"pipetest_{addr}.cpp")
             with open(tmp, "w", encoding="utf-8", newline="\n") as fh:
                 fh.write(broken)
-            got = gate(addr, tmp)
+            got = gate(addr, tmp, state)
             os.remove(tmp)
             if got == "MATCH":
                 holes += 1
@@ -134,6 +147,46 @@ def main():
             else:
                 passed += 1
 
+    addr, path, _txt = samples[0]
+    blocked = tempfile.mkdtemp(prefix="blocked_", dir=f"{SP}/handwork")
+    os.makedirs(os.path.join(blocked, "gated", "main", addr + ".cpp"))
+    r = gate_run(addr, path, blocked)
+    if r.returncode == 0 or "PRESERVATION-FAILED" not in r.stdout or r.stdout.strip().endswith("MATCH"):
+        failed += 1
+        print(f"REGRESSION  snapshot failure was not rejected: {r.stdout[-160:]} {r.stderr[-160:]}")
+    else:
+        passed += 1
+    parallel = tempfile.mkdtemp(prefix="parallel_", dir=f"{SP}/handwork")
+    def concurrent_probe(job):
+        kind, probe = job
+        probe_addr, probe_path, _ = probe
+        if kind == "gate":
+            return gate_run(probe_addr, probe_path, parallel)
+        return subprocess.run([sys.executable, f"{KIT}/wdiff.py", "main", probe_addr, probe_path],
+                              env={**os.environ, "DQIX_STATE": parallel},
+                              capture_output=True, text=True, cwd=REPO)
+    probes = samples[:2]
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        results = list(pool.map(concurrent_probe, [(kind, probe) for kind in ("gate", "diff") for probe in probes]))
+    for r in results:
+        if r.returncode != 0 or not r.stdout.strip().endswith("MATCH"):
+            failed += 1
+            print(f"REGRESSION  concurrent gate/diff: {r.stdout[-160:]} {r.stderr[-160:]}")
+        else:
+            passed += 1
+    for probe_addr, probe_path, _ in probes:
+        saved = os.path.join(parallel, "gated", "main", probe_addr + ".cpp")
+        if not os.path.isfile(saved) or open(saved, "rb").read() != open(probe_path, "rb").read():
+            failed += 1
+            print(f"REGRESSION  {probe_addr} concurrent snapshot differs")
+        else:
+            passed += 1
+    scratch = os.path.join(parallel, "handwork", "compile")
+    if any(name.endswith(".o") for name in os.listdir(scratch)):
+        failed += 1
+        print("REGRESSION  concurrent gate/diff left compiler objects behind")
+    else:
+        passed += 1
     print(f"\n{passed} correct, {failed} wrong verdicts, {holes} gate holes "
           f"({len(samples)} committed functions x {len(MUTATIONS)} mutations)")
     return 1 if (failed or holes) else 0

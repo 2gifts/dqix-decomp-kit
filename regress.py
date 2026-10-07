@@ -1505,6 +1505,19 @@ def sweep_fingerprint():
 
 STAMP = f"{SP}/wlog/functional_stamp.txt"
 
+
+@check("gate and differ use external state and fail closed on snapshot errors",
+       "kit-relative snapshots were invisible to state pools and failed copies still reported MATCH")
+def _external_gate_state():
+    gate = open(f"{KIT}/wgate.py", encoding="utf-8").read()
+    diff = open(f"{KIT}/wdiff.py", encoding="utf-8").read()
+    if 'SCR=f"{_kp.SP}/handwork/compile"' not in gate or 'SCR = f"{_kp.SP}/handwork/compile"' not in diff:
+        return "compiler scratch is not in external state"
+    if 'f"{_kp.SP}/gated/"' not in gate or 'PRESERVATION-FAILED' not in gate:
+        return "gate does not preserve to external state with a visible failure"
+    if 'os.replace(_tmp,' not in gate or 'ELFFile(io.BytesIO(_fh.read()))' not in diff:
+        return "snapshot publication is not atomic or differ retains an open object handle"
+
 if __name__ == "__main__":
     slow = "--slow" in sys.argv
     nbad = run_functional() if slow else 0

@@ -25,8 +25,9 @@ import residue
 import buildcfg
 
 REPO = _kp.REPO
-# The scratchpad is wherever THIS file lives; the old %TEMP% path was deleted by Windows cleanup.
-SCR = os.path.dirname(os.path.abspath(__file__)).replace(chr(92), "/")
+# PID-isolated compiler scratch belongs to external state.
+SCR = f"{_kp.SP}/handwork/compile"
+os.makedirs(SCR, exist_ok=True)
 CC = buildcfg.cc_path(os.environ.get("MWCC"))
 FLAGS = list(buildcfg.FLAGS)
 # Per-file flag experiments: a real build can compile one file with different optimisation
@@ -92,7 +93,9 @@ r = subprocess.run([CC] + FLAGS + ["-c", SRC, "-o", _OBJ], capture_output=True, 
 if r.returncode != 0:
     fail("COMPILE-FAIL: " + (r.stdout + r.stderr)[-600:])
 try:
-    elf = ELFFile(open(_OBJ, "rb"))
+    import io
+    with open(_OBJ, "rb") as _fh:
+        elf = ELFFile(io.BytesIO(_fh.read()))
     texts = [s for s in elf.iter_sections() if s.name == SEC]
     if not texts:
         fail(f"SIZE/OVERGEN: no {SEC} emitted")
@@ -190,5 +193,4 @@ elif _cls in ("OVERGEN", "UNDERGEN"):
     print("  wrong SIZE -> no colouring rewrite can close it while the length is wrong.")
 else:
     print("  operands differ with matching mnemonics -> check immediates/offsets first (#4).")
-
 

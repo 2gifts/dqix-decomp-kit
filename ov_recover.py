@@ -172,7 +172,10 @@ def gate():
         try: os.remove(p)
         except OSError: pass
     sweep_foreign()
-    cf = sh("python", "tools/configure.py", "usa", "--no-extract")
+    configure_args = ["python", "tools/configure.py", "usa", "--no-extract"]
+    if os.environ.get("DQIX_PREINSTALLED_COMPILER"):
+        configure_args += ["--compiler", os.environ["DQIX_PREINSTALLED_COMPILER"]]
+    cf = sh(*configure_args)
     # MAIN-ONLY PREFLIGHT (~free: `ninja check` depends on `ninja delink` anyway, so this only pulls
     # that step forward). A new main delink entry re-splits one of dsd's gap modules, and a module
     # whose symbol sizes sum past its section size makes mwldarm abort with a message naming neither

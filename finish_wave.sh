@@ -150,7 +150,9 @@ if [ "$GAINED" -eq 0 ] && [ "$(git rev-parse --short HEAD)" = "$H0" ]; then
 fi
 
 # gate
-python tools/configure.py usa --no-extract >/dev/null 2>&1
+_compiler_args=()
+[ -n "${DQIX_PREINSTALLED_COMPILER:-}" ] && _compiler_args=(--compiler "$DQIX_PREINSTALLED_COMPILER")
+python tools/configure.py usa --no-extract "${_compiler_args[@]}" >/dev/null 2>&1
 if ! ninja check >/tmp/fw_check.log 2>&1; then
   echo "RED: ninja check FAILED — NOT pushing. tail:"; tail -3 /tmp/fw_check.log
   echo "held: $SP/hold_${LBL} (nothing lost)"; exit 4
@@ -203,4 +205,3 @@ fi
 rm -f build/usa/report.json; ninja report >/dev/null 2>&1
 COV=$(python -c "import json;m=json.load(open('build/usa/report.json'))['measures'];print('%d/%d = %.2f%%'%(m['matched_functions'],m['total_functions'],m['matched_functions_percent']))")
 echo "OK ${LBL}: +${GAINED} delinked (${BEFORE}->${AFTER}), green, sha1 OK, ${PUSH}, cov ${COV}, held ${SP}/hold_${LBL}"
-
