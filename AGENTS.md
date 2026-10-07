@@ -99,3 +99,8 @@ the user asks.
     from it.
 18. State stays in `$SP`, outside the checkout. Never write state into `$KIT` and never point
     `state.path` or `DQIX_STATE` inside it. Update the checkout through `kit_update.py` only.
+19. A crack is not finished until it is promoted: append the `$SP/wlog/levers.tsv` row, then turn the
+    lever into a `colorsweep.py` rule, a repair, or a `core.md` rule citing the address, with its
+    `regress.py` proof, or decline it in `levers_declined.txt`. On a miss, record the blocker with
+    `blocker.py` and what was ruled out in `deadends.md`. The dispatcher stops claiming until this is
+    done. [docs/IMPROVEMENT_LOOP.md](docs/IMPROVEMENT_LOOP.md) has the whole loop.

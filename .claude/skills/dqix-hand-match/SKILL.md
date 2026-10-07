@@ -88,6 +88,10 @@ pass the gate and still fail the overlay checksum.
 
 One module at a time. Verify the commit landed before calling it done.
 
+Then promote what closed it, in this session: the `$SP/wlog/levers.tsv` row, and the lever turned into
+a `colorsweep.py` rule, a repair, or a `core.md` rule citing the address, with its `regress.py` proof
+(`$KIT/docs/IMPROVEMENT_LOOP.md` §3). The dispatcher stops claiming until it is promoted or declined.
+
 ## 5. If it will not close
 
 * **Do not write it off.** Human-written code matched with the right transformation more often than

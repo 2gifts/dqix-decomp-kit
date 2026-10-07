@@ -107,6 +107,8 @@ the default model (sonnet).
 
 ## Holds: levers and blockers
 
+The full loop these holds enforce is in [IMPROVEMENT_LOOP.md](IMPROVEMENT_LOOP.md).
+
 Two checks stop claiming until knowledge reaches the doc every worker reads. `pull_all.sh` stops
 refilling slots and `claim.py` serves nothing while either fails; integration continues.
 

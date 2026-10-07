@@ -94,6 +94,7 @@ explains every step.
 
 - [docs/SETUP.md](docs/SETUP.md) — prerequisites, environment, reference decomps, Frida
 - [docs/WORKFLOW.md](docs/WORKFLOW.md) — one function from address to commit
+- [docs/IMPROVEMENT_LOOP.md](docs/IMPROVEMENT_LOOP.md) — how every crack becomes a rule or automation the next session gets for free
 - [docs/FLEET.md](docs/FLEET.md) — the autonomous pipeline, knobs, stopping, cost
 - [docs/LESSONS.md](docs/LESSONS.md) — compiler facts and pipeline rules learned the hard way
 - [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) — sending matches and tool fixes back

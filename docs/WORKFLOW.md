@@ -197,6 +197,9 @@ macros, the conventions of neighbouring files, `#include <globaldefs.h>` first.
 
 ## 9. Land
 
+Landing is not the end: record the lever and promote it as in
+[IMPROVEMENT_LOOP.md](IMPROVEMENT_LOOP.md). The dispatcher stops claiming until you do.
+
 One module:
 
     cp "$F" "$SP/staging/ov017/$A.cpp"

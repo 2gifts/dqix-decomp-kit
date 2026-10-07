@@ -45,7 +45,8 @@ row for `worker_src/deadends.md` to the kit; if you found a lever, send the rule
 
 ## Tool fixes and new levers
 
-Before opening a pull request against the kit:
+Where a lever belongs and what proof it needs: [IMPROVEMENT_LOOP.md](IMPROVEMENT_LOOP.md). Before
+opening a pull request against the kit:
 
     python selfcheck.py
     python regress.py              # add --slow after touching colorsweep.py, wdiff.py or wgate.py
