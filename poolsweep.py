@@ -20,7 +20,8 @@ import re
 import subprocess
 import sys
 
-SP = os.path.dirname(os.path.abspath(__file__)).replace(chr(92), "/")
+SP = _kp.SP
+KIT = _kp.KIT
 REPO = _kp.REPO
 GATHERED = ("staging", "hold_", "_stage", "_reclaim", "quarantine", "repair_work", "_archive",
             "gated", "attempts", "wlog", "inv", "worker_src", "claims", "skiplisted_hold")
@@ -42,7 +43,7 @@ os.makedirs(WORK, exist_ok=True)
 # and is not one: the 2026-08-25 run staged 020c19b8 and 020ca594, both SDK hand asm, both already
 # skiplisted. repairsweep has skipped these since 2026-08-26; this sweep did not.
 SKIPLISTED = set()
-for _p in (f"{SP}/skiplist_main.txt", f"{SP}/skiplist_ov.txt"):
+for _p in (f"{KIT}/skiplist_main.txt", f"{KIT}/skiplist_ov.txt"):
     try:
         for _line in open(_p, encoding="utf-8", errors="ignore"):
             _m = re.match(r"\s*([0-9a-fA-F]{8})\b", _line)
@@ -53,7 +54,7 @@ for _p in (f"{SP}/skiplist_main.txt", f"{SP}/skiplist_ov.txt"):
 
 
 def gate(mod, addr, path):
-    r = subprocess.run([sys.executable, f"{SP}/wgate.py", mod, addr, os.path.abspath(path)],
+    r = subprocess.run([sys.executable, f"{KIT}/wgate.py", mod, addr, os.path.abspath(path)],
                        capture_output=True, text=True, cwd=REPO, stdin=subprocess.DEVNULL)
     return (((r.stdout or "") + (r.stderr or "")).strip().splitlines() or ["(none)"])[0]
 
@@ -91,13 +92,13 @@ for d in sorted(dirs):
         # autorepair rebinds -- so treating it as a miss throws away a finished function. The first
         # run of this sweep reported 19 of them and staged none.
         if "WRONG-SYMBOL" in head or head.startswith("UNDEF-SYM"):
-            subprocess.run([sys.executable, f"{SP}/autorepair.py", mod, addr, work],
+            subprocess.run([sys.executable, f"{KIT}/autorepair.py", mod, addr, work],
                            capture_output=True, text=True, cwd=REPO, stdin=subprocess.DEVNULL)
             head = gate(mod, addr, work)
         # A near miss is a colouring away, and the sweep already knows how to close those.
         m2 = re.match(r"BYTEDIFF: (\d+) ", head)
         if m2 and int(m2.group(1)) <= COLORSWEEP_MAX_BYTES:
-            subprocess.run([sys.executable, f"{SP}/colorsweep.py", mod, addr, work,
+            subprocess.run([sys.executable, f"{KIT}/colorsweep.py", mod, addr, work,
                             "--depth", "3", "--budget", "150", "--apply"],
                            capture_output=True, text=True, cwd=REPO, stdin=subprocess.DEVNULL)
             head = gate(mod, addr, work)

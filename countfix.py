@@ -9,7 +9,8 @@ import subprocess
 import sys
 
 REPO = _kp.REPO
-SP = os.path.dirname(os.path.abspath(__file__))
+SP = _kp.SP
+KIT = _kp.KIT
 TMP = f"{SP}/wlog/countfix_diff.json"
 BACKUP = f"{SP}/wlog/countfix_backup"
 CFG = f"{REPO}/config/usa/arm9"

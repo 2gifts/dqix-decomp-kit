@@ -10,7 +10,8 @@
 # wrapping it, so a check for "is anything running" answers "yes, 4" against an idle machine. That
 # read as a live integration for 36 minutes on 2026-09-09 while nothing at all was running. The fix
 # is not a cleverer pattern -- it is excluding the querying process and its own ancestors by PID.
-SP="$(cd "$(dirname "${BASH_SOURCE[0]}")" && { pwd -W 2>/dev/null || pwd; })"
+KIT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && { pwd -W 2>/dev/null || pwd; })"
+SP="$(python "$KIT/kitpaths.py" state)"
 MODE="${1:---count}"
 KIND="${3:-all}"
 [ "$1" = "--kind" ] && { KIND="$2"; MODE="--count"; }

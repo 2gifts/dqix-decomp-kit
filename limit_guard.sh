@@ -7,7 +7,8 @@
 # (22.9M output, 3.35B cache-read) for 120 functions, while the account was on the way to being locked
 # again. Relaunching into a locked account is pure loss: each spawned worker pays full startup (worker
 # doc + scaffold + symbols) and then dies on the first API call. That happened 75 times across four days.
-SP="$(cd "$(dirname "${BASH_SOURCE[0]}")" && { pwd -W 2>/dev/null || pwd; })"
+KIT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && { pwd -W 2>/dev/null || pwd; })"
+SP="$(python "$KIT/kitpaths.py" state)"
 LOCKFILE="$SP/WEEKLY_LOCKOUT"     # contains a single epoch second: when spawning may resume
 
 # kill_workers -- SIGKILL every `claude -p` worker and its `timeout` wrapper, leaving drivers alone.

@@ -13,7 +13,8 @@ import re, subprocess, os, sys, glob, time, shutil, hashlib
 import srcdir
 # The scratchpad is wherever THIS file lives; the old absolute %TEMP% path was deleted by Windows
 # cleanup on 2026-08-24 and took the whole pipeline with it.
-SP = os.path.dirname(os.path.abspath(__file__)).replace(chr(92), "/")
+SP = _kp.SP
+KIT = _kp.KIT
 REPO = _kp.REPO
 os.chdir(REPO)
 MOD = sys.argv[1]              # "000".."035" (an overlay) or "main" (the arm9 module)
@@ -25,11 +26,11 @@ if MAIN:
     HEXC    = "[0-9a-fA-F]"                # main's delinks.txt mixes UPPER and lowercase hex
     CFG     = "config/usa/arm9"            # not .../overlays/ovNN
     SRCDIR  = srcdir.for_module("main")
-    INT     = f"{SP}/integrate.py"         # one integrator for every module
+    INT     = f"{KIT}/integrate.py"         # one integrator for every module
     INTARGS = ["main"]
     # main's address space (0x02000000-0x021536e0) is disjoint from every overlay's, so sharing a
     # skiplist would be safe — but overlay addrs collide with EACH OTHER, so the files stay split.
-    SKIP    = f"{SP}/skiplist_main.txt"
+    SKIP    = f"{KIT}/skiplist_main.txt"
     MSG     = "Match {n} arm9 main functions"
     DEFSTAGE = ["main_stage"]
 else:
@@ -39,9 +40,9 @@ else:
     HEXC    = "[0-9a-f]"
     CFG     = f"config/usa/arm9/overlays/ov{OV}"
     SRCDIR  = srcdir.for_module(OV)
-    INT     = f"{SP}/integrate.py"         # one integrator for every module
+    INT     = f"{KIT}/integrate.py"         # one integrator for every module
     INTARGS = [OV]
-    SKIP    = f"{SP}/skiplist_ov.txt"
+    SKIP    = f"{KIT}/skiplist_ov.txt"
     MSG     = f"Match {{n}} ov{OV} overlay functions"
     DEFSTAGE = ["ov000_w5rescue", "ov000_w4w5", "ov000_entangled", "ov000_stage"]
 # The `// USA:` tag matcher. The overlay pattern is byte-identical to the old hardcoded one; main only
@@ -178,9 +179,9 @@ def gate():
     # the symbol nor the cause. modsize_check names the module and the culprit symbols. FAIL-SOFT: a
     # crashed/absent checker never reds the gate — only an explicit rc==1 verdict does, and then we
     # skip the ~6-min full check entirely. See SP/inv/mainfix_FINDINGS.md.
-    if MAIN and os.path.exists(f"{SP}/modsize_check.py"):
+    if MAIN and os.path.exists(f"{KIT}/modsize_check.py"):
         dl = sh("ninja", "delink")
-        ms = sh("python", f"{SP}/modsize_check.py")
+        ms = sh("python", f"{KIT}/modsize_check.py")
         if dl.returncode == 0 and ms.returncode == 1 and "VIOLATION" in ms.stdout:
             try:
                 open(f"{SP}/wlog/gate_{SUF}.txt", "w", encoding='utf-8', errors='ignore').write(
@@ -197,7 +198,7 @@ def gate():
         # from the generated lcf + the built objects that every `<obj>.o(<sec>)` line resolves to
         # exactly one object that really has that section, and that each segment's placed bytes sum to
         # its declared size. Anything it reports IS the drift. See SP/inv/drift_FINDINGS.md.
-        lc = sh("python", f"{SP}/inv/drift/lcfcheck.py")
+        lc = sh("python", f"{KIT}/inv/drift/lcfcheck.py")
         try:
             open(f"{SP}/wlog/gate_{SUF}.txt", "w", encoding='utf-8', errors='ignore').write(
                 f"--- configure ---\n{cf.stdout}\n{cf.stderr}\n--- lcfcheck ---\n{lc.stdout}\n"
@@ -399,7 +400,7 @@ ASMPAT = re.compile(r'(?m)^\s*asm\b|\basm\s+(?:void|int|unsigned|char|long|short
 # The ONLY functions allowed to land as hand-written assembly, by address. See asm_allow.txt for
 # why each one is there. Everything else still falls under the no-hand-asm policy below.
 ASM_ALLOW = set()
-for _l in open(f"{SP}/asm_allow.txt", encoding="utf-8").read().splitlines():
+for _l in open(f"{KIT}/asm_allow.txt", encoding="utf-8").read().splitlines():
     _l = _l.split('#', 1)[0].strip()
     if _l: ASM_ALLOW.add(_l.split()[0].lower())
 
@@ -668,7 +669,7 @@ print(f"[{SUF}] {len(cands)} candidates")
 # burning every wave on the drained overlays. Fix: classify locally FIRST (~0.3s/func, no gate), then
 # gate only the fully-verified TRUSTED set — which is green on the first build and commits in one shot.
 # BAD verdicts never reach a gate at all; RISKY (unconfirmable reloc) is quarantined to its own bisect.
-sys.path.insert(0, SP)
+sys.path.insert(0, KIT)
 from classify import classify
 _cls = {}
 for _a in sorted(variants):

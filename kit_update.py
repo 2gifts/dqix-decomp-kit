@@ -16,6 +16,7 @@ import sys
 import kitpaths
 
 SP = kitpaths.SP
+KIT = kitpaths.KIT
 URL = os.environ.get("DQIX_KIT_URL", "https://github.com/ZevyaDev/dqix-decomp-kit.git")
 BRANCH = os.environ.get("DQIX_KIT_BRANCH", "main")
 INSTRUCTIONS = ("AGENTS.md", "CLAUDE.md", ".claude/skills/", ".claude/workflows/", "worker_src/")
@@ -24,7 +25,7 @@ BUSY = ("pull_all.pid", "wave.lock", "claims/INTEGRATING")
 
 
 def git(*args):
-    return subprocess.run(["git", "-C", SP, *args], capture_output=True, text=True)
+    return subprocess.run(["git", "-C", KIT, *args], capture_output=True, text=True)
 
 
 def main():
@@ -60,7 +61,7 @@ def main():
     argv = [sys.executable, "kit_init.py"]
     if any(f.startswith(SLOW_TRIGGERS) for f in changed):
         argv.append("--slow")
-    sys.exit(0 if subprocess.run(argv, cwd=SP).returncode == 0 else 1)
+    sys.exit(0 if subprocess.run(argv, cwd=KIT).returncode == 0 else 1)
 
 
 main()

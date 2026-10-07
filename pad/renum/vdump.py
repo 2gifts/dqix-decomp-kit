@@ -6,7 +6,7 @@ import os
 import subprocess
 import sys
 
-FRIDA = (_kp.SP + "/frida")
+FRIDA = (_kp.KIT + "/frida")
 REPO = _kp.REPO
 OPS = {0x6d: "add", 0x7a: "cmp", 0x7b: "mov", 0x80: "pool", 0xa5: "ldr", 0xa9: "ldrb", 0xad: "ldrsh",
        0xb2: "shift", 0x76: "bl", 0x71: "b", 0xee: "str", 0xbd: "mvn"}

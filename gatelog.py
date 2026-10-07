@@ -2,11 +2,15 @@
 
     python gatelog.py <main|NNN> <addr> <session>     -> "STALL <phase> <n>" or "OK <n>"
 """
+import os as _kpos, sys as _kpsys
+_kpsys.path.insert(0, _kpos.path.dirname(_kpos.path.abspath(__file__)))
+import kitpaths as _kp
 import os
 import sys
 import time
 
-SP = os.path.dirname(os.path.abspath(__file__))
+SP = _kp.SP
+KIT = _kp.KIT
 NEAR_BYTES = int(os.environ.get("STALL_NEAR_BYTES", "32"))
 NEAR_LIMIT = int(os.environ.get("STALL_NEAR_LIMIT", "12"))
 LIMITS = {"compile": int(os.environ.get("STALL_NOCOMPILE", "6")),

@@ -26,6 +26,7 @@ import re, sys, os, glob, subprocess
 from capstone import Cs, CS_ARCH_ARM, CS_MODE_ARM
 
 SP = _kp.SP
+KIT = _kp.KIT
 REPO = _kp.REPO
 md = Cs(CS_ARCH_ARM, CS_MODE_ARM)
 
@@ -263,7 +264,7 @@ def attempt(mod, addr, stage=False):
         return None
     p = f"{SP}/lab/trans_{addr}.cpp"
     open(p, 'w', encoding='utf-8').write(src)
-    r = subprocess.run(["python", f"{SP}/wgate.py", mod, addr, p], capture_output=True, text=True)
+    r = subprocess.run(["python", f"{KIT}/wgate.py", mod, addr, p], capture_output=True, text=True)
     o = (r.stdout + r.stderr).strip()
     if o.startswith("MATCH"):
         if stage:
@@ -280,7 +281,7 @@ if __name__ == "__main__":
         maxi = int(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2].isdigit() else 40
         skip = set()
         for f in ("skiplist_ov.txt", "skiplist_main.txt"):
-            q = f"{SP}/{f}"
+            q = f"{KIT}/{f}"
             if os.path.exists(q):
                 skip |= {l.split()[0].lower() for l in open(q) if l.strip()}
         hit = tried = 0

@@ -12,12 +12,13 @@ from concurrent.futures import ThreadPoolExecutor
 import frida
 from elftools.elf.elffile import ELFFile
 
-sys.path.insert(0, (_kp.SP + "/frida"))
+sys.path.insert(0, (_kp.KIT + "/frida"))
 import forcereal  # noqa: E402
 
 SP = _kp.SP
+KIT = _kp.KIT
 REPO = _kp.REPO
-sys.path.insert(0, SP)
+sys.path.insert(0, KIT)
 import buildcfg  # noqa: E402
 
 JS = r"""

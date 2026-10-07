@@ -23,6 +23,7 @@ import re, sys, os
 from capstone import Cs, CS_ARCH_ARM, CS_MODE_ARM
 
 SP = _kp.SP
+KIT = _kp.KIT
 REPO = _kp.REPO
 md = Cs(CS_ARCH_ARM, CS_MODE_ARM)
 md.detail = True

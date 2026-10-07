@@ -11,6 +11,9 @@ justified by one have lost their evidence and must go back to being decompiled a
 Without --apply this only reports. With it, unevidenced files move to _unevidenced/<module>/ where
 they stay readable; nothing is deleted.
 """
+import os as _kpos, sys as _kpsys
+_kpsys.path.insert(0, _kpos.path.dirname(_kpos.path.abspath(__file__)))
+import kitpaths as _kp
 import os
 import re
 import shutil
@@ -18,7 +21,8 @@ import sys
 
 import sdkident
 
-SP = os.path.dirname(os.path.abspath(__file__))
+SP = _kp.SP
+KIT = _kp.KIT
 
 
 def main():

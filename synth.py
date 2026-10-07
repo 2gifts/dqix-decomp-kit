@@ -23,6 +23,7 @@ import re, sys, os, glob, subprocess
 from capstone import Cs, CS_ARCH_ARM, CS_MODE_ARM
 
 SP = _kp.SP
+KIT = _kp.KIT
 REPO = _kp.REPO
 md = Cs(CS_ARCH_ARM, CS_MODE_ARM)
 
@@ -142,12 +143,12 @@ def attempt(mod, addr, quiet=False):
     # and is the same pass integration runs; measured on 020c7b38 and 020c7ca8, both go straight to
     # MATCH after it.
     try:
-        sys.path.insert(0, SP)
+        sys.path.insert(0, KIT)
         import autorepair
         autorepair.repair(p, mod, addr)
     except Exception:
         pass
-    r = subprocess.run(["python", f"{SP}/wgate.py", mod, addr, p], capture_output=True, text=True)
+    r = subprocess.run(["python", f"{KIT}/wgate.py", mod, addr, p], capture_output=True, text=True)
     if (r.stdout + r.stderr).strip().startswith("MATCH"):
         d = f"{SP}/hold_main" if mod == "main" else f"{SP}/hold_ov{mod}"
         os.makedirs(d, exist_ok=True)
@@ -165,7 +166,7 @@ if sys.argv[1] == "--sweep":
     maxsz = int(sys.argv[2]) if len(sys.argv) > 2 else 32
     skip = set()
     for f in ("skiplist_ov.txt", "skiplist_main.txt"):
-        q = f"{SP}/{f}"
+        q = f"{KIT}/{f}"
         if os.path.exists(q):
             skip |= {l.split()[0].lower() for l in open(q) if l.strip()}
     tried = hit = 0

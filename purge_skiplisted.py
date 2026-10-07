@@ -18,7 +18,8 @@ _kpsys.path.insert(0, _kpos.path.dirname(_kpos.path.abspath(__file__)))
 import kitpaths as _kp
 import glob, os, re, shutil, subprocess, sys
 
-SP = os.path.dirname(os.path.abspath(__file__)).replace("\\", "/")
+SP = _kp.SP
+KIT = _kp.KIT
 REPO = _kp.REPO
 DRY = "--dry" in sys.argv
 HOLD = f"{SP}/skiplisted_hold"
@@ -26,7 +27,7 @@ os.chdir(REPO)
 
 skip = set()
 for name in ("skiplist_main.txt", "skiplist_ov.txt"):
-    p = f"{SP}/{name}"
+    p = f"{KIT}/{name}"
     if os.path.exists(p):
         for line in open(p, encoding="utf-8", errors="ignore"):
             line = line.strip()

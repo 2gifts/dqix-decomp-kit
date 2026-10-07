@@ -7,4 +7,4 @@ sys.path.insert(0, os.path.dirname(NAMING))
 import kitpaths
 
 GAME = kitpaths.REPO
-LABEL = os.environ.get("DQIX_LABEL_REPO", os.path.join(os.path.dirname(kitpaths.SP), "dqix-label")).replace("\\", "/")
+LABEL = os.environ.get("DQIX_LABEL_REPO", os.path.join(os.path.dirname(kitpaths.KIT), "dqix-label")).replace("\\", "/")

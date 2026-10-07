@@ -7,7 +7,8 @@
 # of them reds a wave that each one alone would have passed. They land ONE PER WAVE, and they are
 # never skiplisted -- doing that was already tried and was wrong.
 set -u
-SP="$(cd "$(dirname "$0")" && pwd)"
+KIT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && { pwd -W 2>/dev/null || pwd; })"
+SP="$(python "$KIT/kitpaths.py" state)"
 LOG="$SP/wlog/land_harvest.log"
 HOLD="$SP/secure_queue"
 SECURE_END=$((0x02000800))
@@ -16,7 +17,7 @@ mkdir -p "$HOLD" "$SP/wlog"
 wave() {
   local mod="$1" label="$2"
   echo "$(date '+%H:%M') finish_wave $mod ($label)" >> "$LOG"
-  bash "$SP/finish_wave.sh" "$mod" >> "$SP/wlog/land_${mod}.log" 2>&1
+  bash "$KIT/finish_wave.sh" "$mod" >> "$SP/wlog/land_${mod}.log" 2>&1
   local rc=$?
   echo "$(date '+%H:%M') rc=$rc $(tail -1 "$SP/wlog/land_${mod}.log" | cut -c1-160)" >> "$LOG"
 }

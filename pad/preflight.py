@@ -15,9 +15,10 @@ import re
 import subprocess
 import sys
 
-SP = os.path.dirname(os.path.dirname(os.path.abspath(__file__))).replace(chr(92), "/")
+SP = _kp.SP
+KIT = _kp.KIT
 REPO = _kp.REPO
-sys.path.insert(0, SP)
+sys.path.insert(0, KIT)
 from classify import classify
 
 want = sys.argv[1] if len(sys.argv) > 1 else None
@@ -34,7 +35,7 @@ for d in sorted(glob.glob(f"{SP}/staging/*")):
             rows.append((lbl, os.path.basename(f), "NO-TAG", "-"))
             continue
         addr = m.group(1).lower()
-        r = subprocess.run([sys.executable, f"{SP}/wgate.py", mod, addr, f],
+        r = subprocess.run([sys.executable, f"{KIT}/wgate.py", mod, addr, f],
                            capture_output=True, text=True, cwd=REPO)
         out = ((r.stdout or "") + (r.stderr or "")).strip().splitlines()
         gate = next((l.split(":")[0] for l in reversed(out) if l[:1].isupper()), "?")

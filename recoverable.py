@@ -15,6 +15,7 @@ import kitpaths as _kp
 import re, os, sys, glob
 
 SP = _kp.SP
+KIT = _kp.KIT
 REPO = _kp.REPO
 
 # every dir ov_recover can gather from. Keep this in sync with ov_recover's STAGING/DEFSTAGE: a dir we

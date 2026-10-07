@@ -61,7 +61,7 @@ move UP a level — these are the angles that have NOT been tried on any of them
 
 - **Your callee signatures.** 31 of 119 kept artifacts declare a callee with the wrong parameter
   list, and a wrong signature changes argument setup and live ranges — which is exactly what a
-  register residue looks like. Run `python $SP/symfix.py <your.cpp>` and re-gate BEFORE concluding
+  register residue looks like. Run `python $KIT/symfix.py <your.cpp>` and re-gate BEFORE concluding
   anything about colouring.
   `0218ecd8` — a `sub r3, sp, #4` / `stm` / `ldr r3, [r3]` block in the target is the tell that a
   struct argument STRADDLES r3 and the stack. Size the parameter to produce it: two 12-byte structs
@@ -72,8 +72,8 @@ move UP a level — these are the angles that have NOT been tried on any of them
   example both ways: REGPERM 14 on the default, byte-exact under `-O4`, and then MATCHED at the
   default once the flag had shown which redundancy to remove.
 
-      WGATE_FLAGS="-O4" python $SP/wgate.py <mod> <addr> <your.cpp>     # also -O3, -opt speed
-      python $SP/flagsweep.py --only <addr>                            # sweeps the useful sets
+      WGATE_FLAGS="-O4" python $KIT/wgate.py <mod> <addr> <your.cpp>     # also -O3, -opt speed
+      python $KIT/flagsweep.py --only <addr>                            # sweeps the useful sets
 
   A flag match is a DIAGNOSIS, never a result: the ROM was built at one flag set (-O2 globally), so
   matching only under -O4 means YOUR source carries something -O4 deletes — a redundant local, a
@@ -84,7 +84,7 @@ move UP a level — these are the angles that have NOT been tried on any of them
   arithmetic and the residue is registers, the order those values are DEFINED is the whole answer,
   and the space is bounded — `020b7ba0`'s was the 47th of 720:
 
-      python $SP/pad/permorder.py <mod> <addr> <src.cpp> <marker.txt>
+      python $KIT/pad/permorder.py <mod> <addr> <src.cpp> <marker.txt>
 
 - **The values around the residue, not in it.** A register pair that will not swap is often decided
   by a live range that starts somewhere else — a value the ROM re-loads and you cache, or one you
@@ -351,7 +351,7 @@ Simplify scans vregs in ascending order and the last node pushed takes the lowes
 "X must colour before Y" means X needs a HIGHER vreg number. Declared locals are numbered in REVERSE
 textual order regardless of scope: to raise a number, declare it EARLIER; to land between two
 block-scoped locals, move the group to function scope in the order you need (`021615bc`, 75 -> 0).
-`python $SP/pad/renum/renum.py <src> <mod> <addr> <size> X=<rank>` forces a numbering in the real
+`python $KIT/pad/renum/renum.py <src> <mod> <addr> <size> X=<rank>` forces a numbering in the real
 compiler (`X=86.5` = between v86 and v87) and tells you which rank closes it.
 Declaration order only moves locals that KEEP their own vreg. Check first with
 `pad/renum/vdump.py`: if a local's number does not change when you move its declaration, the lever
@@ -428,7 +428,7 @@ The scheduler still emits the state read where the ROM does, UNLESS the store
 in between may alias it: a store into a non-const global does, and pins the read below it, so first
 make that object a static in an inline accessor (see "A CONSTANT HOISTED ABOVE A GLOBAL'S POOL
 LOAD"). colorsweep `r5_stmt_swap` makes the move. To find which value to move,
-`python $SP/frida/colorforce.py <src> <mod> <addr-hex> <size> <pool-offset-hex>`
+`python $KIT/frida/colorforce.py <src> <mod> <addr-hex> <size> <pool-offset-hex>`
 flips one colouring decision at a time and names the flip that makes the function exact.
 
 ### TWO LOADS IN SWAPPED SCRATCH REGISTERS — load both into their locals, THEN transform each
@@ -680,9 +680,9 @@ accumulated alongside a call (`mask |= N;`) goes BEFORE the `Store(g, count++, .
 ROM sets it first; same for a local assigned in an arm before its call, and for two increments
 ahead of a call taking `&idx`: `count++; idx++;` puts the plain counter first (`02192700`). Hoist the block's
 scalars to bare declarations and search their order with
-`python $SP/pad/declperm.py <mod> <addr> <template.cpp> <decls.json>` (template holds `/*DECLS*/`);
+`python $KIT/pad/declperm.py <mod> <addr> <template.cpp> <decls.json>` (template holds `/*DECLS*/`);
 `ov023:021eeaac` 68 -> 19 that way. Check a hypothesis before writing it:
-`python $SP/pad/cf_multi.py <file.cpp> ovNNN <addr> <size> <pool_from> '{"moves": [[idx, pos]], "choices": [idx]}' --order`
+`python $KIT/pad/cf_multi.py <file.cpp> ovNNN <addr> <size> <pool_from> '{"moves": [[idx, pos]], "choices": [idx]}' --order`
 reorders or flips mwcc's colouring and prints the node order.
 
 ### THE SAME LEVER ORDERS SPILL SLOTS — declare bare, assign where the ROM computes it
@@ -702,7 +702,7 @@ load with it and costs more than it saves.
 `ldr r0, [pc, #0x584] | ldr r0, [pc, #0x58c]` reads like pool-layout noise and usually is. It can
 also mean ours loads a DIFFERENT constant: mwcc lays the pool out in first-use order, so one wrong
 literal early in the function reorders the whole pool and every later load shifts with it. Run
-`python $SP/pad/poolmap.py <mod> <addr> <file.cpp>` before chasing any of them as a schedule: it
+`python $KIT/pad/poolmap.py <mod> <addr> <file.cpp>` before chasing any of them as a schedule: it
 prints every `ldr [pc]` with the VALUE it reads in the ROM and in our build (relocated pointers
 resolved to their symbol's address), and marks each row VALUE (a wrong constant — fix the source)
 or offset (same constant, different slot). `ov025:021ebb90` had two constants swapped
@@ -1108,7 +1108,7 @@ A struct temporary's STACK SLOT follows its inline nesting depth: a copy made in
 is itself inlined lands in a different slot band than the same copy written in place. When only
 Vec3-style temp slots are wrong (OPERAND on `add rX,sp,#N`), move each copy one inline level in or
 out; a named const reference to a call result is laid out as a local, not a temp (`0216ba70`).
-When an attempt is NOT matching, suspect your own scaffolding first: run `python $SP/plausible.py <file>`
+When an attempt is NOT matching, suspect your own scaffolding first: run `python $KIT/plausible.py <file>`
 and remove what it flags (volatile locals, unused address-taking pointers, `x = x;`, chains of invented
 one-line inlines). Those reach a lower number in the wrong basin; the original never had them.
 Never `const int CAP = 999;` as a block-local: mwcc folds every use but still emits `CAP$N` into
@@ -1169,7 +1169,7 @@ together. A switch arm that does only what "no arm" does should not be written.
   instruction must be predicable and the arm must be <= 5 instructions (`b` included) at `-O2`. Game
   code is all `-O2`, so when the ROM leaves a short arm as a branch, the ORIGINAL arm held something
   non-predicable or was longer: a call, a volatile access, a store through a different base, an extra
-  instruction. Find it. `$SP/pad/renum/ifcvtrace.py <src> "<flags>"` lists every arm, its size and
+  instruction. Find it. `$KIT/pad/renum/ifcvtrace.py <src> "<flags>"` lists every arm, its size and
   why it was or was not converted. Only in third-party library code (NitroSDK, DWC/NHTTP, the
   CodeWarrior runtime, MSL) can it instead mean the library was built `,p` (limit 3): there emit
   `BLOCKED <addr> SPEEDTU` (`0224185c`, `0200df80`).

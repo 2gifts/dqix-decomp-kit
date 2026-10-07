@@ -31,7 +31,8 @@ import subprocess
 import sys
 import time
 
-SP = os.path.dirname(os.path.abspath(__file__))
+SP = _kp.SP
+KIT = _kp.KIT
 REPO = _kp.REPO
 CLAIM_TTL_MIN = 90
 RESERVED = ".reserved"
@@ -53,7 +54,7 @@ def skiplist():
     out = set()
     for name in ("skiplist_main.txt", "skiplist_ov.txt"):
         try:
-            for line in open(f"{SP}/{name}", encoding="utf-8"):
+            for line in open(f"{KIT}/{name}", encoding="utf-8"):
                 if line.strip():
                     out.add(line.split()[0].lower())
         except OSError:
@@ -146,7 +147,7 @@ def blocked_addrs():
             _BLOCKED = set()
             return _BLOCKED
         cut = 0
-        for p in (f"{SP}/worker_src/core.md", f"{SP}/colorsweep.py"):
+        for p in (f"{KIT}/worker_src/core.md", f"{KIT}/colorsweep.py"):
             try:
                 cut = max(cut, int(os.path.getmtime(p)))
             except OSError:
@@ -510,7 +511,7 @@ def main():
     # Only the per-module claim is gated: `--best` must keep answering or pull_all reads an empty
     # reply as "every pool drained" and stops itself for good.
     for gate in ("levercheck.py", "blockercheck.py"):
-        if subprocess.run([sys.executable, os.path.join(SP, gate)],
+        if subprocess.run([sys.executable, os.path.join(KIT, gate)],
                           capture_output=True).returncode != 0:
             return 0
 

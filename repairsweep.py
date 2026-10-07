@@ -18,7 +18,8 @@ _kpsys.path.insert(0, _kpos.path.dirname(_kpos.path.abspath(__file__)))
 import kitpaths as _kp
 import os, re, shutil, subprocess, sys, glob, hashlib
 
-SP = os.path.dirname(os.path.abspath(__file__))
+SP = _kp.SP
+KIT = _kp.KIT
 REPO = _kp.REPO
 # SHARDING. A full pass is ~36 s per candidate and the pool is >1200, so one process needs half a
 # day and the machine sits at one core. REPAIR_SHARD="i/n" takes every n-th job starting at i (1
@@ -58,7 +59,7 @@ for a in list(sym):
 # A skiplisted address is a decided question -- hand asm the placement policy refuses, or a measured
 # dead end. Re-gating it produces a HIT the integrator then discards, which reads as a free match
 # and is not one.
-for p in (f"{SP}/skiplist_main.txt", f"{SP}/skiplist_ov.txt"):
+for p in (f"{KIT}/skiplist_main.txt", f"{KIT}/skiplist_ov.txt"):
     if os.path.exists(p):
         for line in open(p, encoding="utf-8", errors="ignore"):
             m = re.match(r'\s*([0-9a-fA-F]{8})\b', line)
@@ -131,7 +132,7 @@ def gate(mod, addr, path, flags=""):
     if flags:
         env["WGATE_FLAGS"] = flags
     env.pop("WGATE_SESSION", None)
-    r = subprocess.run([sys.executable, f"{SP}/wgate.py", mod, addr, path],
+    r = subprocess.run([sys.executable, f"{KIT}/wgate.py", mod, addr, path],
                        capture_output=True, text=True, cwd=REPO, stdin=subprocess.DEVNULL, env=env)
     return ((r.stdout or "") + (r.stderr or "")).strip()
 
@@ -268,7 +269,7 @@ for i, (mod, addr, f) in enumerate(jobs):
     verdict = gate(mod, addr, work)
     verdict0 = verdict
     if verdict.startswith("UNDEF-SYM"):
-        subprocess.run([sys.executable, f"{SP}/fixundef.py", mod, addr, work],
+        subprocess.run([sys.executable, f"{KIT}/fixundef.py", mod, addr, work],
                        capture_output=True, text=True, cwd=REPO, stdin=subprocess.DEVNULL)
         verdict = gate(mod, addr, work)
         # fixundef can only resolve a name that CARRIES its address. The other UNDEF-SYM cause is a
@@ -276,13 +277,13 @@ for i, (mod, addr, f) in enumerate(jobs):
         # key on, and autorepair is the only thing that fixes it. This sweep never called autorepair
         # at all, so every parked file with that fault was invisible to it.
         if verdict.startswith("UNDEF-SYM"):
-            subprocess.run([sys.executable, f"{SP}/autorepair.py", mod, addr, work],
+            subprocess.run([sys.executable, f"{KIT}/autorepair.py", mod, addr, work],
                            capture_output=True, text=True, cwd=REPO, stdin=subprocess.DEVNULL)
             verdict = gate(mod, addr, work)
     if "total=0x0" in verdict and ".init" in verdict and add_initcode(work):
         verdict = gate(mod, addr, work)
         if verdict.startswith("UNDEF-SYM"):
-            subprocess.run([sys.executable, f"{SP}/fixundef.py", mod, addr, work],
+            subprocess.run([sys.executable, f"{KIT}/fixundef.py", mod, addr, work],
                            capture_output=True, text=True, cwd=REPO, stdin=subprocess.DEVNULL)
             verdict = gate(mod, addr, work)
     # SIZE/OVERGEN is the BIGGEST stuck bucket (40 of 60 in the last full sweep, vs 15 BYTEDIFF),
@@ -315,7 +316,7 @@ for i, (mod, addr, f) in enumerate(jobs):
         budget = min(COLORSWEEP_BUDGET + fsize // 8, COLORSWEEP_BUDGET_MAX)
         nbytes = re.search(r"(\d+) bytes", verdict)
         if _near_size or (nbytes and int(nbytes.group(1)) <= max_bytes):
-            subprocess.run([sys.executable, f"{SP}/colorsweep.py", mod, addr, work,
+            subprocess.run([sys.executable, f"{KIT}/colorsweep.py", mod, addr, work,
                             "--depth", str(COLORSWEEP_DEPTH),
                             "--budget", str(budget), "--apply"],
                            capture_output=True, text=True, cwd=REPO, stdin=subprocess.DEVNULL)

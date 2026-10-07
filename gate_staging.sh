@@ -2,7 +2,8 @@
 # Gate every file in staging/<module> and move the failures out, so a wave only ever integrates
 # candidates that have already passed the same check the integrator applies.
 # Usage: gate_staging.sh <module>   (module = main or an overlay number, e.g. 016)
-SP="$(cd "$(dirname "${BASH_SOURCE[0]}")" && { pwd -W 2>/dev/null || pwd; })"
+KIT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && { pwd -W 2>/dev/null || pwd; })"
+SP="$(python "$KIT/kitpaths.py" state)"
 MOD="${1:-main}"
 SUB="$MOD"
 [ "$MOD" != main ] && [ -d "$SP/staging/ov$MOD" ] && SUB="ov$MOD"
@@ -16,7 +17,7 @@ for f in "$DIR"/*.cpp; do
     if [ -z "$addr" ]; then
         echo "NOTAG   $(basename "$f")"; mv "$f" "$REJ/"; fail=$((fail+1)); continue
     fi
-    out=$(python "$SP/wgate.py" "$MOD" "$addr" "$f" 2>&1 | tail -1)
+    out=$(python "$KIT/wgate.py" "$MOD" "$addr" "$f" 2>&1 | tail -1)
     # A WRONG-SYMBOL is usually repairable, not fatal: translate.py names its output `Trans_<addr>`
     # and workers pick their own names, while the integrator renames to the config-bound symbol
     # anyway. Rejecting on the spot would strand work the pipeline can fix, so run the same repair
@@ -27,8 +28,8 @@ for f in "$DIR"/*.cpp; do
     # file rejected here can be byte-exact behind one linkage keyword. ov017:021ab280 was.
     case "$out" in
         WRONG-SYMBOL*|UNDEF-SYM*)
-            python "$SP/autorepair.py" "$MOD" "$addr" "$f" >/dev/null 2>&1
-            out=$(python "$SP/wgate.py" "$MOD" "$addr" "$f" 2>&1 | tail -1)
+            python "$KIT/autorepair.py" "$MOD" "$addr" "$f" >/dev/null 2>&1
+            out=$(python "$KIT/wgate.py" "$MOD" "$addr" "$f" 2>&1 | tail -1)
             [ "$out" = "MATCH" ] && echo "REPAIRED $addr $(basename "$f")"
             ;;
     esac

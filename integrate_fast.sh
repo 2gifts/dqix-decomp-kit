@@ -10,8 +10,9 @@
 # The per-module structure is not pointless: when a build goes red from link drift, culling culprits
 # is only tractable if you know which module to suspect. So this is a HYBRID, not a replacement --
 # best case one build instead of ten, worst case one wasted build then the old path unchanged.
-SP="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO="${DQIX_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && { pwd -W 2>/dev/null || pwd; })/dqix-decomp}"
+KIT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && { pwd -W 2>/dev/null || pwd; })"
+SP="$(python "$KIT/kitpaths.py" state)"
+REPO="$(python "$(cd "$(dirname "${BASH_SOURCE[0]}")" && { pwd -W 2>/dev/null || pwd; })/kitpaths.py" repo)"
 LOG="$SP/wlog/integrate_fast.log"
 # ONE TERMINAL LINE ON EVERY EXIT PATH. There are nine `exit`s below and any of them can be the last
 # thing that happens. A watcher greping for one success word goes silent on the other eight, and that
@@ -84,10 +85,11 @@ ls "$SP"/staging/*/*.cpp >/dev/null 2>&1 || { echo "nothing left to batch" | tee
 # what wgate cannot see, since it masks reloc bytes. A single RELOCWRONG file (ov008/021894b8, whose
 # callee resolved to 0x205d1e0) cost a full combined build. Move anything not TRUSTED/RISKY aside
 # first; it is preserved, not deleted, and the per-module path can still try it later.
-python - "$SP" <<'PRE' >> "$LOG" 2>&1
+python - "$SP" "$KIT" <<'PRE' >> "$LOG" 2>&1
 import collections, glob, os, re, shutil, sys
 SP = sys.argv[1]
-sys.path.insert(0, SP)
+KIT = sys.argv[2]
+sys.path.insert(0, KIT)
 import classify as C
 bad = f"{SP}/staging_unclassified"
 os.makedirs(bad, exist_ok=True)
@@ -126,7 +128,7 @@ _mark=$(wc -l < "$LOG")
 # path did not, so a staged copy of an address already committed was re-wired on every pass and the
 # linker aborted with "Previously defined" -- two combined builds went RED that way on 2026-09-09,
 # each costing a full rollback to per-module. One shared implementation so the two cannot drift.
-python "$SP/stagepurge.py" --apply >> "$LOG" 2>&1
+python "$KIT/stagepurge.py" --apply >> "$LOG" 2>&1
 ls "$SP"/staging/*/*.cpp >/dev/null 2>&1 || { echo "$(date '+%H:%M') everything staged was already landed" | tee -a "$LOG"; exit 0; }
 for d in "$SP"/staging/*/; do
   [ -d "$d" ] || continue
@@ -135,7 +137,7 @@ for d in "$SP"/staging/*/; do
   if [ "$mod" = "main" ]; then dst="$REPO/src/Combat/Main"; else dst="$REPO/src/Combat/Overlay_$((10#$mod))"; fi
   mkdir -p "$dst"; cp "$d"*.cpp "$dst"/ 2>/dev/null
   # Wire config only -- no build. That is what makes one global build possible.
-  python "$SP/integrate.py" "$mod" >> "$LOG" 2>&1 && placed=$((placed+1))
+  python "$KIT/integrate.py" "$mod" >> "$LOG" 2>&1 && placed=$((placed+1))
 done
 # REGENERATE THE BUILD GRAPH. Wiring a source into delinks.txt tells the LINKER to expect
 # `<file>.o`, but ninja only knows how to produce objects listed in build.ninja -- so without this
@@ -160,9 +162,9 @@ if [ "$green" = "1" ]; then
     git clean -fdq src/ >> "$LOG" 2>&1
     exit 0
   fi
-  python "$SP/countfix.py" >> "$LOG" 2>&1
+  python "$KIT/countfix.py" >> "$LOG" 2>&1
   if [ $? -eq 3 ] && ! { ninja check >/tmp/if_countfix.log 2>&1 && ninja sha1 2>&1 | grep -q "OK"; }; then
-    python "$SP/countfix.py" --restore >> "$LOG" 2>&1
+    python "$KIT/countfix.py" --restore >> "$LOG" 2>&1
     ninja check >/dev/null 2>&1
   fi
   git add -A config/ src/ >> "$LOG" 2>&1
@@ -192,7 +194,7 @@ if [ "$green" = "1" ]; then
       a=$(grep -oE '// USA: func_(ov[0-9]+_)?[0-9a-fA-F]{8}' "$f" | head -1 \
           | grep -oE '[0-9a-fA-F]{8}$' | tr 'A-F' 'a-f')
       _m=$(basename "$(dirname "$f")"); _m=${_m#ov}
-      if [ -n "$a" ] && ! python "$SP/delinked.py" "$a" "$_m"; then
+      if [ -n "$a" ] && ! python "$KIT/delinked.py" "$a" "$_m"; then
         _kept=$((_kept + 1)); continue
       fi
       rm -f "$f"
@@ -203,7 +205,7 @@ if [ "$green" = "1" ]; then
       | tee -a "$LOG"
   fi
   ninja report >/dev/null 2>&1 || echo "$(date '+%H:%M') WARN ninja report failed -- cov is stale" | tee -a "$LOG"
-  python "$SP/cov.py" | tee -a "$LOG"
+  python "$KIT/cov.py" | tee -a "$LOG"
   exit 0
 fi
 
@@ -216,4 +218,4 @@ grep -aE "expected to be at|error:|ERROR|undefined|not found|FAILED" /tmp/if_che
 tail -5 /tmp/if_check.log >> "$LOG"
 git checkout -- config/ src/ >> "$LOG" 2>&1
 git clean -fdq src/ >> "$LOG" 2>&1      # remove the copies this script made; staging still holds them
-exec bash "$SP/integrate_all.sh"
+exec bash "$KIT/integrate_all.sh"

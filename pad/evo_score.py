@@ -16,9 +16,10 @@ import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
 
-SP = os.path.dirname(os.path.dirname(os.path.abspath(__file__))).replace(chr(92), "/")
+SP = _kp.SP
+KIT = _kp.KIT
 REPO = _kp.REPO
-sys.path.insert(0, SP + "/pad")
+sys.path.insert(0, KIT + "/pad")
 
 MOD, ADDR, FILES = sys.argv[1], sys.argv[2].lower(), sys.argv[3:]
 BANNED = re.compile(r"(?m)^[ \t]*#[ \t]*pragma[ \t]+(?!define_section|section)\w.*$|always_inline|__attribute__\s*\(\(\s*noinline")
@@ -67,7 +68,7 @@ def body_status(ours):
 
 
 def gate(path):
-    r = subprocess.run([sys.executable, SP + "/wgate.py", MOD, ADDR, path], cwd=REPO,
+    r = subprocess.run([sys.executable, KIT + "/wgate.py", MOD, ADDR, path], cwd=REPO,
                        capture_output=True, text=True)
     lines = [l for l in (r.stdout + r.stderr).splitlines() if l.strip() and not l.startswith("HINT")]
     return lines[0] if lines else "NO OUTPUT"
@@ -84,7 +85,7 @@ def wgate_fitness(verdict):
 
 
 def sites(path):
-    r = subprocess.run([sys.executable, SP + "/wdiff.py", MOD, ADDR, path], cwd=REPO,
+    r = subprocess.run([sys.executable, KIT + "/wdiff.py", MOD, ADDR, path], cwd=REPO,
                        capture_output=True, text=True, env=dict(os.environ, WDIFF_CTX="0"))
     runs = []
     for m in re.finditer(r"(?m)^\s*\*0x([0-9a-fA-F]+)\s", r.stdout):

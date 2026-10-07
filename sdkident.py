@@ -35,7 +35,8 @@ import os
 import re
 import sys
 
-SP = os.path.dirname(os.path.abspath(__file__))
+SP = _kp.SP
+KIT = _kp.KIT
 REPO = _kp.REPO
 REFS = f"{SP}/refs"
 INDEX = f"{SP}/wlog/sdk_index.json"

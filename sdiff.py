@@ -16,7 +16,8 @@ from capstone import Cs, CS_ARCH_ARM, CS_MODE_ARM, CS_MODE_THUMB
 
 import buildcfg
 
-SP = os.path.dirname(os.path.abspath(__file__))
+SP = _kp.SP
+KIT = _kp.KIT
 REPO = _kp.REPO
 MOD, ADDR, SRC = sys.argv[1], sys.argv[2], sys.argv[3]
 MINRUN = int(sys.argv[4]) if len(sys.argv) > 4 else 1

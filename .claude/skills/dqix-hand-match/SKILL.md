@@ -9,12 +9,14 @@ This is main-thread work: the session doing the matching directly, no worker, no
 pays when the residual is small and the insight is the whole job — the small tier converts worst for
 workers (35%), and cracking one idiom unlocks every function shaped like it.
 
-    SP    the kit root: $DQIX_SP when set, else this session's working directory
+    KIT   the kit checkout (scripts, docs, skills): $DQIX_KIT when set, else this session's
+          working directory
+    SP    the state directory (attempts, logs, claims, staging): `python $KIT/kitpaths.py state`
     REPO  $DQIX_REPO, or ../dqix-decomp
 
 ## Before anything: update the kit
 
-    python $SP/kit_update.py
+    python $KIT/kit_update.py
 
 Exit 0: re-read every `RE-READ` file it prints (this skill included). Any other exit: tell the user
 the line it printed before going on.
@@ -28,16 +30,16 @@ work; an idiom blocking twenty is worth a lot more.
 
 ## 1. Start from the best prior, never the scaffold
 
-    python "$SP/resumable.py" <addr>          # -> the best saved attempt, or empty
+    python "$KIT/resumable.py" <addr>          # -> the best saved attempt, or empty
 
-Empty means no prior exists; then take the scaffold (`python "$SP/scaffold.py" <mod> <addr>
+Empty means no prior exists; then take the scaffold (`python "$KIT/scaffold.py" <mod> <addr>
 "$SP/scaffold/<addr>.cpp"`) — it has every callee and data name resolved. Also try the cheapest lever
 measured on this project first: **clone a matched sibling.** All three first-try matches in the opus
 window began by copying a neighbouring matched function and editing it.
 
 ## 2. Gate before reading anything
 
-    python "$SP/wgate.py" <mod> <addr> <file>
+    python "$KIT/wgate.py" <mod> <addr> <file>
 
 `wgate` is the integrator's own check, so a MATCH here is integrable. It prints exactly one of
 `MATCH` / `COMPILE` / `OVERGEN(size)` / `BYTEDIFF@offsets` / `UNDEF-SYM[...]`. **Gate first, every
@@ -46,7 +48,7 @@ buys context you may not need.
 
 Then read the residual compactly:
 
-    python "$SP/wdiff.py" <mod> <addr> <file>      # only the diverging instructions, side by side
+    python "$KIT/wdiff.py" <mod> <addr> <file>      # only the diverging instructions, side by side
 
 Never dump the full disassembly. Tool output is where the cost lives — 83.6% of worker context,
 measured — and the same applies here.
@@ -55,7 +57,7 @@ measured — and the same applies here.
 
 Fetch the exact recipe rather than reasoning from memory:
 
-    python "$SP/recipe_select.py" --show "<part of the title>"
+    python "$KIT/recipe_select.py" --show "<part of the title>"
 
 | symptom in the diff | what selects |
 |---|---|
@@ -74,7 +76,7 @@ Fetch the exact recipe rather than reasoning from memory:
 
 Try variants in a batch, not one compile at a time:
 
-    python "$SP/vtry.py" <mod> <addr> <base.cpp> <variants.py>    # ANCHOR + VARIANTS dict
+    python "$KIT/vtry.py" <mod> <addr> <base.cpp> <variants.py>    # ANCHOR + VARIANTS dict
 
 ## 4. Land it
 
@@ -82,7 +84,7 @@ A match that is not committed is not a match — `wgate` masks relocs, so a wron
 pass the gate and still fail the overlay checksum.
 
     cp <file> "$SP/staging/<main|ovNNN>/<addr>.cpp"
-    bash "$SP/finish_wave.sh" <mod>        # background — a foreground Bash call is killed at 10 min
+    bash "$KIT/finish_wave.sh" <mod>        # background — a foreground Bash call is killed at 10 min
 
 One module at a time. Verify the commit landed before calling it done.
 
@@ -92,7 +94,7 @@ One module at a time. Verify the commit landed before calling it done.
   not; "won't match" has been wrong here repeatedly.
 * **Do not hatch asm.** The project goal is very little asm in the final product; asm is endgame
   residue only.
-* Park it: `python $SP/blocker.py <main|NNN> <addr> <file.cpp> <size>` records the measured residue
+* Park it: `python $KIT/blocker.py <main|NNN> <addr> <file.cpp> <size>` records the measured residue
   class, and a row in `worker_src/deadends.md` records every form already disproven, so the next
   attempt does not re-buy the same dead ends.
 * If a novel transformation DID close it, record it as a lever (one tab-separated line in

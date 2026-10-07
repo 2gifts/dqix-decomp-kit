@@ -20,7 +20,8 @@ case "$OV" in
 esac
 # The scratchpad is the directory this script lives in. It used to be an absolute path under %TEMP%,
 # which Windows cleanup deleted whole on 2026-08-24, taking the pipeline with it.
-SP="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+KIT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && { pwd -W 2>/dev/null || pwd; })"
+SP="$(python "$KIT/kitpaths.py" state)"
 # ONE WAVE AT A TIME. Two recovery passes in the same repo delete each other's files
 # mid-flight (seen: FileNotFoundError in clean() aborting a whole main pass). Serialise.
 LOCK="$SP/wave.lock"
@@ -51,13 +52,13 @@ if [ "$_got" -ne 1 ]; then
   exit 3
 fi
 trap 'rm -f "$LOCK/pid"; rmdir "$LOCK" 2>/dev/null' EXIT
-REPO="${DQIX_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && { pwd -W 2>/dev/null || pwd; })/dqix-decomp}"
+REPO="$(python "$(cd "$(dirname "${BASH_SOURCE[0]}")" && { pwd -W 2>/dev/null || pwd; })/kitpaths.py" repo)"
 cd "$REPO" || { echo "FATAL: no repo"; exit 2; }
 if [ "$OV" = "main" ]; then
-  DL="config/usa/arm9/delinks.txt"; SRCDIR=$(python "$SP/srcdir.py" main); TAGPRE="func_"; LBL="main"
+  DL="config/usa/arm9/delinks.txt"; SRCDIR=$(python "$KIT/srcdir.py" main); TAGPRE="func_"; LBL="main"
 else
   DEC=$((10#$OV))
-  DL="config/usa/arm9/overlays/ov${OV}/delinks.txt"; SRCDIR=$(python "$SP/srcdir.py" "$OV")
+  DL="config/usa/arm9/overlays/ov${OV}/delinks.txt"; SRCDIR=$(python "$KIT/srcdir.py" "$OV")
   TAGPRE="func_ov${OV}_"; LBL="ov${OV}"
 fi
 Q="$SP/quarantine"; mkdir -p "$Q"
@@ -67,7 +68,7 @@ Q="$SP/quarantine"; mkdir -p "$Q"
 #    It stopped being safe the moment repairsweep began staging its own hits: 0208f588 -- skiplisted
 #    because it is byte-exact per function yet shifts the ARM9 link and reds the checksum -- was
 #    staged automatically on 2026-08-20 and would have entered the next main build unasked.
-python "$SP/purge_skiplisted.py" 2>/dev/null | grep -E '^purge ' || true
+python "$KIT/purge_skiplisted.py" 2>/dev/null | grep -E '^purge ' || true
 # 1. purge pure scratch/junk (repo-root w*.cpp, any stray .o under src) — never part of build.
 find . -maxdepth 1 -name 'w*.cpp' -delete 2>/dev/null
 find src -name '*.o' -delete 2>/dev/null
@@ -124,7 +125,7 @@ BEFORE=$(grep -cE '^\s+\.(text|init) start:' "$DL")   # .init functions count to
 H0=$(git rev-parse --short HEAD)
 
 # integrate (ov_recover snapshots to hold_$LBL BEFORE any git touch, then bisect-commits)
-python -u "$SP/ov_recover.py" "$OV" src 2>&1 | tee -a "$SP/wlog/rec_${OV}.log" | tail -3   # -u: progress visible live (classify+gate can run 10+ min)
+python -u "$KIT/ov_recover.py" "$OV" src 2>&1 | tee -a "$SP/wlog/rec_${OV}.log" | tail -3   # -u: progress visible live (classify+gate can run 10+ min)
 # A CRASHED INTEGRATOR IS NOT A QUIET WAVE. `set -o pipefail` cannot see this one: the exit status
 # of the pipeline is `tail`'s, which is 0 however badly the python died. On 2026-08-25 ov_recover
 # raised AttributeError three lines in, integrated nothing, and the wave signed off
@@ -157,12 +158,12 @@ fi
 ninja rom >/dev/null 2>&1
 if ! ninja sha1 2>&1 | grep -q "OK"; then echo "RED: sha1 mismatch — NOT pushing"; exit 5; fi
 if [ "$(git rev-parse --short HEAD)" != "$H0" ]; then
-  python "$SP/countfix.py" --since="$H0"
+  python "$KIT/countfix.py" --since="$H0"
   if [ $? -eq 3 ]; then
     if ninja check >/tmp/fw_countfix.log 2>&1 && ninja sha1 2>&1 | grep -q "OK"; then
       git add config/ && git commit -q -m "Align config with landed functions"
     else
-      python "$SP/countfix.py" --restore
+      python "$KIT/countfix.py" --restore
       ninja check >/dev/null 2>&1
     fi
   fi

@@ -9,9 +9,9 @@ The same loop for a human at a shell and for a single AI session. The fleet runs
   kit are `main` or `ov017`.
 - **Address**: 8 lowercase hex digits, no `0x` (`021bb1a4`).
 - **Paths**: `wgate.py` and `wdiff.py` change into the decomp directory before opening the source,
-  so pass absolute paths. From the kit root in Git Bash:
+  so pass absolute paths. From the kit checkout in Git Bash:
 
-      export SP="$(pwd -W 2>/dev/null || pwd)"
+      export KIT="$(pwd -W 2>/dev/null || pwd)" SP="$(python kitpaths.py state)"
       export DQIX_REPO="${DQIX_REPO:-$(cd ../dqix-decomp && (pwd -W 2>/dev/null || pwd))}"
       M=017; A=021bb1a4; F="$SP/wip/ov017/$A.cpp"
       mkdir -p "$SP/wip/ov017" "$SP/staging/ov017"

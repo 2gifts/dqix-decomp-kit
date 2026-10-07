@@ -10,8 +10,9 @@
 # The order walked is the order claim.py will serve: the near-miss priority queue first, then each
 # module's next few addresses. presweep.py skips anything already swept at its current artifact, so
 # a pass over an unchanged queue costs almost nothing.
-SP="$(cd "$(dirname "${BASH_SOURCE[0]}")" && { pwd -W 2>/dev/null || pwd; })"
-REPO="${DQIX_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && { pwd -W 2>/dev/null || pwd; })/dqix-decomp}"
+KIT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && { pwd -W 2>/dev/null || pwd; })"
+SP="$(python "$KIT/kitpaths.py" state)"
+REPO="$(python "$KIT/kitpaths.py" repo)"
 EVERY="${1:-600}"
 LOG="$SP/wlog/presweep_watch.log"
 # REFUSE TO BE THE SECOND COPY. Every relaunch without this stacks another loop on the same queue:
@@ -27,12 +28,12 @@ cd "$REPO" || exit 2
 
 while :; do
   [ -e "$SP/STOP_PULL" ] && { echo "$(date '+%H:%M') stop flag" >> "$LOG"; break; }
-  for _mod in $(cd "$SP" && python claim.py --pools 2>/dev/null | awk '{print $1}' | head -4); do
+  for _mod in $(python "$KIT/claim.py" --pools 2>/dev/null | awk '{print $1}' | head -4); do
     _marg="$_mod"; [ "$_mod" = "main" ] || _marg="$_mod"
-    for _a in $(cd "$SP" && python claim.py "$_mod" --peek "${PRESWEEP_AHEAD:-4}" 2>/dev/null \
+    for _a in $(python "$KIT/claim.py" "$_mod" --peek "${PRESWEEP_AHEAD:-4}" 2>/dev/null \
                 | awk '{print $1}' | grep -E '^[0-9a-f]{8}$'); do
       [ -e "$SP/STOP_PULL" ] && break 3
-      _r=$(timeout "${PRESWEEP_TIMEOUT:-1800}" python "$SP/presweep.py" "$_marg" "$_a" --deep 2>/dev/null | tr -d '\r')
+      _r=$(timeout "${PRESWEEP_TIMEOUT:-1800}" python "$KIT/presweep.py" "$_marg" "$_a" --deep 2>/dev/null | tr -d '\r')
       case "$_r" in
         MATCH*)    echo "$(date '+%H:%M') $_mod $_a MATCHED ahead of the queue -- ${_r#MATCH }" >> "$LOG" ;;
         IMPROVED*) echo "$(date '+%H:%M') $_mod $_a ${_r}" >> "$LOG" ;;

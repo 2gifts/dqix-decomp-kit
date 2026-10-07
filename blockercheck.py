@@ -7,13 +7,17 @@ one, write the recipe, and every later member of that class is free. Only rows r
 citation count against the class again. A class not worth a recipe goes in wlog/blockers_declined.txt
 as `<CLASS> <reason>`. Exit 1 while any class is over threshold.
 """
+import os as _kpos, sys as _kpsys
+_kpsys.path.insert(0, _kpos.path.dirname(_kpos.path.abspath(__file__)))
+import kitpaths as _kp
 import os
 import re
 import sys
 
-SP = os.path.dirname(os.path.abspath(__file__))
+SP = _kp.SP
+KIT = _kp.KIT
 TSV = f"{SP}/wlog/blockers.tsv"
-DOC = f"{SP}/worker_src/core.md"
+DOC = f"{KIT}/worker_src/core.md"
 DECLINED = f"{SP}/wlog/blockers_declined.txt"
 NEVER_HOLD = {"MATCH", "ALREADY-COMMITTED", "NO-ARTIFACT", "UNKNOWN"}
 
@@ -67,7 +71,7 @@ def main():
     # deadends.md counts too: recipe_select injects the row for the address being worked, so a class
     # cracked and written up there has reached the session that needs it.
     doc = ""
-    for p in (DOC, f"{SP}/worker_src/deadends.md"):
+    for p in (DOC, f"{KIT}/worker_src/deadends.md"):
         if os.path.exists(p):
             doc += open(p, encoding="utf-8", errors="ignore").read().lower()
     declined = set()

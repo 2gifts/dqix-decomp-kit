@@ -21,7 +21,8 @@ import os
 import re
 import sys
 
-SP = os.path.dirname(os.path.abspath(__file__)).replace(chr(92), "/")
+SP = _kp.SP
+KIT = _kp.KIT
 REPO = _kp.REPO
 
 BUILTIN = {"v": "void", "i": "int", "j": "unsigned int", "c": "char", "a": "signed char",
@@ -208,7 +209,7 @@ def owner_of(addr):
 
 def verdict(mod, addr, path):
     import subprocess
-    r = subprocess.run([sys.executable, f"{SP}/wgate.py", mod, addr, path],
+    r = subprocess.run([sys.executable, f"{KIT}/wgate.py", mod, addr, path],
                        capture_output=True, text=True, cwd=REPO)
     for line in ((r.stdout or "") + (r.stderr or "")).splitlines():
         m = re.match(r"^(MATCH|RESIDUE \w+ -?\d+)", line)

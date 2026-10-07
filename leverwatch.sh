@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-SP="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+KIT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && { pwd -W 2>/dev/null || pwd; })"
+SP="$(python "$KIT/kitpaths.py" state)"
 ONCE=0
 [ "$1" = "--once" ] && { ONCE=1; shift; }
 INTERVAL="${1:-300}"
@@ -14,7 +15,7 @@ while :; do
     echo "$addr" >> "$SEEN"
     echo "LEVER NEEDS PROMOTING $addr: $text"
     fired=1
-  done < <(cd "$SP" && python levercheck.py --keys 2>/dev/null)
+  done < <(python "$KIT/levercheck.py" --keys 2>/dev/null)
   [ "$ONCE" = 1 ] && [ "$fired" = 1 ] && exit 0
   sleep "$INTERVAL"
 done

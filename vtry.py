@@ -13,7 +13,8 @@ import os
 import subprocess
 import sys
 
-SP = os.path.dirname(os.path.abspath(__file__))
+SP = _kp.SP
+KIT = _kp.KIT
 ROOT = _kp.REPO
 
 
@@ -38,7 +39,7 @@ def main():
         with open(path, "w", encoding="utf-8", newline="\n") as fh:
             fh.write(base.replace(anchor, repl, 1).replace("// USA: func_", "// SCRATCH-USA: func_"))
         proc = subprocess.run(
-            [sys.executable, os.path.join(SP, "wdiff.py"), module, addr, path],
+            [sys.executable, os.path.join(KIT, "wdiff.py"), module, addr, path],
             capture_output=True, text=True, cwd=ROOT,
         )
         out = (proc.stdout or "").strip().splitlines()

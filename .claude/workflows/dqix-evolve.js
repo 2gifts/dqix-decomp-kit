@@ -27,26 +27,27 @@ const SEED = Array.isArray(A.seedLevers) ? A.seedLevers : []
 const BASES = Array.isArray(A.base) ? A.base : [A.base]
 const PATHS_SCHEMA = {
   type: 'object',
-  properties: { sp: { type: 'string' }, repo: { type: 'string' } },
-  required: ['sp', 'repo'],
+  properties: { kit: { type: 'string' }, sp: { type: 'string' }, repo: { type: 'string' } },
+  required: ['kit', 'sp', 'repo'],
 }
 async function kitPaths() {
-  if (A.sp && A.repo) return { sp: A.sp, repo: A.repo }
-  const root = A.sp || '${DQIX_SP:-.}'
+  if (A.kit && A.sp && A.repo) return { kit: A.kit, sp: A.sp, repo: A.repo }
+  const root = A.kit || '${DQIX_KIT:-.}'
   const r = await agent(
     `Run exactly this one command and nothing else:
-cd "${root}" && python -c "import kitpaths as k; print(k.SP); print(k.REPO)"
-Return the first line it prints as sp and the second as repo, verbatim. Do not edit anything.`,
+cd "${root}" && python -c "import kitpaths as k; print(k.KIT); print(k.SP); print(k.REPO)"
+Return the first line it prints as kit, the second as sp and the third as repo, verbatim. Do not edit anything.`,
     { label: 'paths', schema: PATHS_SCHEMA, effort: 'low' })
-  if (!r) throw new Error('could not resolve the kit paths; pass args.sp and args.repo')
-  return { sp: A.sp || r.sp, repo: A.repo || r.repo }
+  if (!r) throw new Error('could not resolve the kit paths; pass args.kit, args.sp and args.repo')
+  return { kit: A.kit || r.kit, sp: A.sp || r.sp, repo: A.repo || r.repo }
 }
 const PATHS = await kitPaths()
+const KIT = PATHS.kit
 const SP = PATHS.sp
 const REPO = PATHS.repo
-const SCORER = `cd ${REPO} && python ${SP}/pad/evo_score.py ${MOD} ${ADDR}`
-const CAPCHECK = `python ${SP}/evocap.py ${ADDR}`
-const CASEDIFF = ADDR === '02061c04' ? `     and     python ${SP}/pad/caseresidue.py <file> --all` : ''
+const SCORER = `cd ${REPO} && python ${KIT}/pad/evo_score.py ${MOD} ${ADDR}`
+const CAPCHECK = `python ${KIT}/evocap.py ${ADDR}`
+const CASEDIFF = ADDR === '02061c04' ? `     and     python ${KIT}/pad/caseresidue.py <file> --all` : ''
 
 let seed = ((A.seed || 20260910) >>> 0) || 1
 function rnd() { seed = (Math.imul(seed, 1103515245) + 12345) >>> 0; return seed / 4294967296 }
@@ -68,7 +69,7 @@ const RULES = `
 BOARD ${BOARD} lists everything already tried. Read \`tail -60\` of it first -- never the whole file, it is large.
 Append ONE line per scored file:  echo "EVO <your label> <fitness> <sig> <the edit in a few words>" >> ${BOARD}
 SCORE:   ${SCORER} <file> [<file> ...]     one JSON line per file; fitness 0 = MATCH; sig names each differing site
-INSPECT: cd ${REPO} && WDIFF_CTX=2 python ${SP}/wdiff.py ${MOD} ${ADDR} <file>${CASEDIFF}
+INSPECT: cd ${REPO} && WDIFF_CTX=2 python ${KIT}/wdiff.py ${MOD} ${ADDR} <file>${CASEDIFF}
 The source must be something the original developers could have written: NO #pragma of any kind, no always_inline or noinline
 attributes, no compiler overrides, no fake extra call arguments, no assembly. The scorer rejects such files.
 AND WHEN A SITE RESISTS EVERY FORM, THE RESIDUE IS POINTING AT CODE SOMEBODY INVENTED. Read the whole file for constructs
@@ -81,7 +82,7 @@ BEFORE the third attempt at one site, not after the seventh.
 MINE BEFORE YOU GUESS -- the ROM's own form is usually written down somewhere already, and reading it
 costs a fraction of a blind variant sweep:
 * THE CORPUS. Committed matching sources are proof of what mwcc emits for a C form. Find ones whose
-  ROM code has the pairing you cannot produce: \`python ${SP}/pad/findshape.py [--twonode]\`,
+  ROM code has the pairing you cannot produce: \`python ${KIT}/pad/findshape.py [--twonode]\`,
   \`pad/findladder.py\`, \`pad/shapecat.py\`, or a plain grep over ${REPO}/src for the mnemonics or the
   constant. Map a source to its address by its \`// USA:\` comment as well as by its filename, or you
   will miss every semantically-named file. Then read that file's C and copy the FORM, not the text.
@@ -95,7 +96,7 @@ costs a fraction of a blind variant sweep:
 Say in your report which of these you searched and what you found, so the next generation does not
 repeat it.
 PROBE BEFORE YOU SWEEP. Compiling the whole function to test one construct costs a minute; a 10-line
-probe costs a second:  python ${SP}/pad/probe_cc.py <probe.cpp> --bytes  prints the codegen of a
+probe costs a second:  python ${KIT}/pad/probe_cc.py <probe.cpp> --bytes  prints the codegen of a
 scratch file built with the project compiler and flags. Reproduce the ROM's instruction pairing in a
 probe, sweep twenty forms there in the time one whole-function compile takes, then apply only the
 winners to the real file. A probe is NOT faithful on its own -- it omits the surrounding code that
@@ -240,7 +241,7 @@ for (gen = 1; gen <= MAXGENS && !winner && !stopped && pop.length; gen++) {
     const plan = await agent(
       `You plan generation ${gen} of an evolutionary search on ${MOD}:${ADDR}. Population, best first:
 ${pop.map(describe).join('\n')}
-You have AT MOST SIX tool calls, then you answer: \`tail -80 ${BOARD}\`; \`${SCORER} <best file>\` or \`python ${SP}/pad/caseresidue.py <file> --all\`; one \`sed -n\` of the source at a differing site; one more inspection; and up to two calls that MINE for the ROM's form rather than guess it -- \`python ${SP}/pad/findshape.py\`, a grep over ${REPO}/src for the mnemonics or constant at the differing site, a read of a reference decomp under ${SP}/refs, or a WebSearch / \`gh search code\` when the code looks like library, SDK or runtime code. Do not open other agents' files or logs.
+You have AT MOST SIX tool calls, then you answer: \`tail -80 ${BOARD}\`; \`${SCORER} <best file>\` or \`python ${KIT}/pad/caseresidue.py <file> --all\`; one \`sed -n\` of the source at a differing site; one more inspection; and up to two calls that MINE for the ROM's form rather than guess it -- \`python ${KIT}/pad/findshape.py\`, a grep over ${REPO}/src for the mnemonics or constant at the differing site, a read of a reference decomp under ${SP}/refs, or a WebSearch / \`gh search code\` when the code looks like library, SDK or runtime code. Do not open other agents' files or logs.
 At least one of your levers should carry evidence from a matching source, a reference decomp or the web -- name the file or URL in its prompt -- unless you searched and found nothing, in which case say so.
 Propose EXACTLY ${WIDTH} levers, each {key, parent, prompt}: parent must be one of the population files above; the prompt names the differing site, what the ROM does there versus ours, and concrete untried source edits. Levers must differ from each other and from the board. If the population has more than one file, put at least one lever on a file that is not the best.
 Context: ${NOTES}`,

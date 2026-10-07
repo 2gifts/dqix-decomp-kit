@@ -1,7 +1,8 @@
 #!/bin/bash
 # Backstop for the STOP banner: kill a session that keeps gating after the gate told it to stop.
 # usage: gatewatch.sh <main|NNN> <addr> <session> <pid>
-SP="$(cd "$(dirname "${BASH_SOURCE[0]}")" && { pwd -W 2>/dev/null || pwd; })"
+KIT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && { pwd -W 2>/dev/null || pwd; })"
+SP="$(python "$KIT/kitpaths.py" state)"
 MOD="$1"; ADDR="$2"; SESS="$3"; PID="$4"
 GRACE="${GATEWATCH_GRACE:-180}"
 POLL="${GATEWATCH_POLL:-20}"
@@ -11,7 +12,7 @@ first=0
 [ -z "$PID" ] && exit 2
 while kill -0 "$PID" 2>/dev/null; do
   sleep "$POLL"
-  st=$(python "$SP/gatelog.py" "$MOD" "$ADDR" "$SESS" 2>/dev/null | head -1)
+  st=$(python "$KIT/gatelog.py" "$MOD" "$ADDR" "$SESS" 2>/dev/null | head -1)
   case "$st" in
     STALL*)
       now=$(date +%s)

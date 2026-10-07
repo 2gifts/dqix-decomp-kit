@@ -18,8 +18,9 @@
 # Usage: bash lockout_harvest.sh <seconds_to_harvest>
 #   Workers must be quiesced before calling (both callers wait on every pid first) — the sweep takes
 #   exclusive full builds and would corrupt a live wave's tree otherwise.
-SP="$(cd "$(dirname "${BASH_SOURCE[0]}")" && { pwd -W 2>/dev/null || pwd; })"
-REPO="${DQIX_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && { pwd -W 2>/dev/null || pwd; })/dqix-decomp}"
+KIT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && { pwd -W 2>/dev/null || pwd; })"
+SP="$(python "$KIT/kitpaths.py" state)"
+REPO="$(python "$KIT/kitpaths.py" repo)"
 LOG="$SP/wlog/harvest.log"
 cd "$REPO" || exit 2
 DUR=${1:-3600}
@@ -34,7 +35,7 @@ while [ "$(date +%s)" -lt "$END" ]; do
 
   # 1. The standard sweep: harvest scratchpad matches, run the zero-token producers, commit whatever
   #    is recoverable per module. Its own 3h stamp keeps the producers from re-scanning every cycle.
-  bash "$SP/recover_sweep.sh" >> "$LOG" 2>&1
+  bash "$KIT/recover_sweep.sh" >> "$LOG" 2>&1
   [ "$(date +%s)" -ge "$END" ] && break
 
   # 2. PERMUTE THE NEAR-MISSES. This is the part that actually scales with a multi-day window, and it
@@ -58,11 +59,11 @@ while [ "$(date +%s)" -lt "$END" ]; do
     case "$f" in
       *"/hold_main/"*) M=main ;;
       *"/hold_ov"*)    M=$(echo "$f" | grep -oE 'hold_ov[0-9]+' | grep -oE '[0-9]+$') ;;
-      *)               M=$(python "$SP/addr2mod.py" "$a" 2>/dev/null) ;;
+      *)               M=$(python "$KIT/addr2mod.py" "$a" 2>/dev/null) ;;
     esac
     [ -z "$M" ] && { touch "$mark"; continue; }
     touch "$mark"
-    timeout 600 python "$SP/permute.py" "$M" "$a" "$f" 400 >> "$LOG" 2>&1
+    timeout 600 python "$KIT/permute.py" "$M" "$a" "$f" 400 >> "$LOG" 2>&1
   done
 
   # 3. Breathe. A cycle that found nothing should not spin the disk for four days; the pool only

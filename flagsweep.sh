@@ -3,8 +3,9 @@
 # necessarily built with the project's own flags: a routine that branches to a shared `bx lr`
 # where our -O2 predicates the return is a different optimisation level, not a different source.
 # Usage: flagsweep.sh <OV|main> <addr> <file.cpp>
-SP="$(cd "$(dirname "${BASH_SOURCE[0]}")" && { pwd -W 2>/dev/null || pwd; })"
-REPO="${DQIX_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && { pwd -W 2>/dev/null || pwd; })/dqix-decomp}"
+KIT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && { pwd -W 2>/dev/null || pwd; })"
+SP="$(python "$KIT/kitpaths.py" state)"
+REPO="$(python "$KIT/kitpaths.py" repo)"
 OV="$1"; ADDR="$2"; SRC="$3"
 cd "$REPO" || exit 2
 
@@ -26,7 +27,7 @@ sets=(
 )
 
 for f in "${sets[@]}"; do
-  out=$(WDIFF_FLAGS="$f" python "$SP/wdiff.py" "$OV" "$ADDR" "$SRC" </dev/null 2>&1 | head -1)
+  out=$(WDIFF_FLAGS="$f" python "$KIT/wdiff.py" "$OV" "$ADDR" "$SRC" </dev/null 2>&1 | head -1)
   printf '%-24s %s\n' "[${f:-default}]" "$out"
 done
 echo "FLAGSWEEP DONE"

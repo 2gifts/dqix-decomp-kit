@@ -25,8 +25,9 @@ import subprocess
 import sys
 
 SP = _kp.SP
+KIT = _kp.KIT
 REPO = _kp.REPO
-sys.path.insert(0, SP)
+sys.path.insert(0, KIT)
 import claim                                                    # noqa: E402
 
 BANDS = [("small  <=64", 0, 64), ("medium 65-256", 65, 256), ("l- 257-512", 257, 512),
@@ -141,14 +142,14 @@ def main():
     flags = [f for f in ("FLEET_STOPPED", "STOP_PULL", "USAGE_LIMIT_STOP", "wave.lock")
              if os.path.exists(os.path.join(SP, f))]
     staged = sorted(glob.glob(SP + "/staging/*/*.cpp"))
-    self_out = sh(sys.executable, SP + "/selfcheck.py", cwd=SP).splitlines()
-    regress_marker = sh(sys.executable, SP + "/regress.py", cwd=SP).splitlines()
+    self_out = sh(sys.executable, KIT + "/selfcheck.py", cwd=SP).splitlines()
+    regress_marker = sh(sys.executable, KIT + "/regress.py", cwd=SP).splitlines()
 
     L = []
     a = L.append
     a("# DQIX state — GENERATED, do not hand-edit")
     a("")
-    a("`python $SP/progress.py` rewrites this file; `pull_all.sh` refreshes it every loop. The skills")
+    a("`python $KIT/progress.py` rewrites this file; `pull_all.sh` refreshes it every loop. The skills")
     a("(`dqix-plan`, `dqix-continue`) point here instead of carrying a state block that goes stale.")
     a("Hand-written knowledge — cracked idioms, open residues, what is ruled out — is in OPEN_WORK.md.")
     a("")

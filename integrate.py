@@ -35,11 +35,12 @@ import buildcfg
 import dataown
 
 SP = _kp.SP
+KIT = _kp.KIT
 REPO = os.environ.get("DQIX_REPO", _kp.REPO)
 CC = buildcfg.CC
 FLAGS = list(buildcfg.FLAGS)
 
-_spec = _ilu.spec_from_file_location("autorepair", f"{SP}/autorepair.py")
+_spec = _ilu.spec_from_file_location("autorepair", f"{KIT}/autorepair.py")
 _autorepair = _ilu.module_from_spec(_spec)
 _spec.loader.exec_module(_autorepair)
 
@@ -314,7 +315,7 @@ os.makedirs(f"{SP}/wlog", exist_ok=True)
 
 ASMPAT = re.compile(r'(?m)^\s*asm\b|\basm\s+(?:void|int|unsigned|char|long|short)\b')
 ASM_ALLOW = set()
-for _l in open(f"{SP}/asm_allow.txt", encoding="utf-8").read().splitlines():
+for _l in open(f"{KIT}/asm_allow.txt", encoding="utf-8").read().splitlines():
     _l = _l.split('#', 1)[0].strip()
     if _l: ASM_ALLOW.add(_l.split()[0].lower())
 

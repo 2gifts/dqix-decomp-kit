@@ -3,6 +3,9 @@ word-aligned extern declared aligned(4)), which switches mwcc's IR optimizer off
 
     IRO_SHARD=i/n python irosweep.py      disjoint shards by address hash
 """
+import os as _kpos, sys as _kpsys
+_kpsys.path.insert(0, _kpos.path.dirname(_kpos.path.abspath(__file__)))
+import kitpaths as _kp
 import hashlib
 import os
 import re
@@ -10,12 +13,13 @@ import shutil
 import subprocess
 import sys
 
-SP = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, SP)
+SP = _kp.SP
+KIT = _kp.KIT
+sys.path.insert(0, KIT)
 import colorsweep  # noqa: E402
 
-_src = open(f"{SP}/repairsweep.py", encoding="utf-8").read()
-_ns = {"__file__": f"{SP}/repairsweep.py", "__name__": "repairsweep_pool"}
+_src = open(f"{KIT}/repairsweep.py", encoding="utf-8").read()
+_ns = {"__file__": f"{KIT}/repairsweep.py", "__name__": "repairsweep_pool"}
 os.environ.pop("REPAIR_SHARD", None)
 os.environ.pop("REPAIR_ONLY", None)
 exec(compile(_src[:_src.index("\ndef gate(")], "repairsweep_pool", "exec"), _ns)
@@ -44,7 +48,7 @@ for i, (mod, addr, f) in enumerate(jobs):
     tag, new = got[0]
     work = f"{WORK}/{os.path.basename(f)}"
     open(work, "w", encoding="utf-8", newline="").write(new)
-    r = subprocess.run([sys.executable, f"{SP}/wgate.py", mod, addr, work], capture_output=True,
+    r = subprocess.run([sys.executable, f"{KIT}/wgate.py", mod, addr, work], capture_output=True,
                        text=True, cwd=REPO, stdin=subprocess.DEVNULL)
     verdict = ((r.stdout or "") + (r.stderr or "")).strip().splitlines()
     verdict = verdict[-1] if verdict else "NO-OUTPUT"

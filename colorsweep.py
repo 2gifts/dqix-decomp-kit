@@ -28,9 +28,10 @@ import re
 import subprocess
 import sys
 
-SP = os.path.dirname(os.path.abspath(__file__))
+SP = _kp.SP
+KIT = _kp.KIT
 REPO = _kp.REPO
-WDIFF = os.path.join(SP, "wdiff.py")
+WDIFF = os.path.join(KIT, "wdiff.py")
 
 IDENT = r"[A-Za-z_]\w*"
 # Real code rarely combines two bare identifiers: the operands are `p->field`, `a[i]`, or
@@ -67,7 +68,7 @@ def score(text, module, addr, tag):
     # function one wrong-length case body makes every later instruction read as a diff and the score
     # stops tracking progress -- measured 5562 "differing bytes" against 204 real ones.
     if os.environ.get("CS_SCORER") == "case":
-        sys.path.insert(0, os.path.join(SP, "pad"))
+        sys.path.insert(0, os.path.join(KIT, "pad"))
         import casescore
         n, detail = casescore.score(path)
         return n, detail

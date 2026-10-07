@@ -15,8 +15,9 @@
 # Both are re-read every cycle, so either can be changed while this runs -- no restart, no redeploy.
 # A slot that exhausts its budget exits and is respawned with a fresh one, which is the recycling:
 # sessions stay short (cost per message climbs with length) while the slot keeps working.
-SP="$(cd "$(dirname "${BASH_SOURCE[0]}")" && { pwd -W 2>/dev/null || pwd; })"
-REPO="${DQIX_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && { pwd -W 2>/dev/null || pwd; })/dqix-decomp}"
+KIT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && { pwd -W 2>/dev/null || pwd; })"
+SP="$(python "$KIT/kitpaths.py" state)"
+REPO="$(python "$KIT/kitpaths.py" repo)"
 LOG="$SP/wlog/pull_all.log"
 INTEGRATE_EVERY=${INTEGRATE_EVERY:-1800}      # seconds between integration passes
 # THE FREE SWEEP HAS TO RUN BY ITSELF. repairsweep re-gates every parked source and stages what a
@@ -78,10 +79,10 @@ while :; do
   # 2026-09-08: held 03:02, last integration 01:07, three proven matches stranded for six hours and
   # ~$18 of further claims made during the hold. Hold the CLAIMS, never the landings.
   hold_claims=""
-  if ! (cd "$SP" && python levercheck.py >/dev/null 2>&1); then
+  if ! (python "$KIT/levercheck.py" >/dev/null 2>&1); then
     if [ -z "$lever_held" ]; then
       echo "$(date '+%H:%M') HOLDING: unpromoted lever(s) -- no new claims until core.md cites them" >> "$LOG"
-      (cd "$SP" && python levercheck.py --verbose 2>&1 | sed 's/^/  /') >> "$LOG"
+      (python "$KIT/levercheck.py" --verbose 2>&1 | sed 's/^/  /') >> "$LOG"
       lever_held=1
     fi
     hold_claims=1
@@ -89,10 +90,10 @@ while :; do
     echo "$(date '+%H:%M') levers promoted -- claiming resumed" >> "$LOG"; lever_held=""
   fi
 
-  if ! (cd "$SP" && python blockercheck.py >/dev/null 2>&1); then
+  if ! (python "$KIT/blockercheck.py" >/dev/null 2>&1); then
     if [ -z "$blocker_held" ]; then
       echo "$(date '+%H:%M') HOLDING: a blocker class is over threshold -- crack one member or decline the class" >> "$LOG"
-      (cd "$SP" && python blockercheck.py --verbose 2>&1 | sed 's/^/  /') >> "$LOG"
+      (python "$KIT/blockercheck.py" --verbose 2>&1 | sed 's/^/  /') >> "$LOG"
       blocker_held=1
     fi
     hold_claims=1
@@ -103,12 +104,12 @@ while :; do
   for ((s=1; s<=SLOTS; s++)); do
     [ -n "$hold_claims" ] && break
     [ -n "${slot_pid[$s]}" ] && continue
-    MOD=$(cd "$SP" && python claim.py --best 2>/dev/null | tr -d '\r\n ')
+    MOD=$(python "$KIT/claim.py" --best 2>/dev/null | tr -d '\r\n ')
     if [ -z "$MOD" ]; then
       echo "$(date '+%H:%M') every pool drained -- nothing left to claim" >> "$LOG"
       touch "$SP/STOP_PULL"; break
     fi
-    bash "$SP/pull_worker.sh" "$MOD" "$s" "$BUDGET" &
+    bash "$KIT/pull_worker.sh" "$MOD" "$s" "$BUDGET" &
     slot_pid[$s]=$!
     echo "$(date '+%H:%M') slot $s -> $MOD \$$BUDGET (pid ${slot_pid[$s]})" >> "$LOG"
   done
@@ -156,7 +157,7 @@ while :; do
         mkdir -p "$SP/claims"; echo "$mod" > "$SP/claims/INTEGRATING"
         last_integ_mod="$mod"
         echo "$(date '+%H:%M') integrate $mod (detached; slots keep working other modules)" >> "$LOG"
-        bash "$SP/finish_wave.sh" "$mod" >> "$SP/wlog/pull_integrate_${mod}.log" 2>&1 &
+        bash "$KIT/finish_wave.sh" "$mod" >> "$SP/wlog/pull_integrate_${mod}.log" 2>&1 &
         integ_pid=$!
         break                      # one module at a time; finish_wave holds the wave lock anyway
       fi
@@ -168,7 +169,7 @@ while :; do
   # hand-derived r11 and r35 -- rules colorsweep already had and would have applied for a compile.
   # The script guards its own pid file, so calling it when it is already up is a no-op.
   if ! kill -0 "$(cat "$SP/presweep_watch.pid" 2>/dev/null)" 2>/dev/null; then
-    bash "$SP/presweep_watch.sh" "${PRESWEEP_EVERY:-300}" >> "$SP/wlog/presweep_watch.log" 2>&1 &
+    bash "$KIT/presweep_watch.sh" "${PRESWEEP_EVERY:-300}" >> "$SP/wlog/presweep_watch.log" 2>&1 &
     echo "$(date '+%H:%M') presweep_watch (re)started" >> "$LOG"
   fi
 
@@ -180,7 +181,7 @@ while :; do
      && [ $((SECONDS - last_sweep)) -ge "$SWEEP_EVERY" ]; then
     last_sweep=$SECONDS
     echo "$(date '+%H:%M') repair sweep (detached)" >> "$LOG"
-    python -u "$SP/repairsweep.py" >> "$SP/wlog/repairsweep_auto.log" 2>&1 &
+    python -u "$KIT/repairsweep.py" >> "$SP/wlog/repairsweep_auto.log" 2>&1 &
     sweep_pid=$!
   fi
 
@@ -191,7 +192,7 @@ while :; do
   # rather than every loop because it shells out to the process list.
   if [ $((SECONDS - last_state)) -ge "${STATE_EVERY:-120}" ]; then
     last_state=$SECONDS
-    python "$SP/progress.py" >/dev/null 2>&1 || true
+    python "$KIT/progress.py" >/dev/null 2>&1 || true
   fi
 
   sleep 30

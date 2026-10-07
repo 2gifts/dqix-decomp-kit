@@ -9,6 +9,7 @@ import sys
 from concurrent.futures import ThreadPoolExecutor
 
 SP = _kp.SP
+KIT = _kp.KIT
 REPO = _kp.REPO
 HERE = os.path.dirname(os.path.abspath(__file__))
 MOD, ADDR = sys.argv[1], sys.argv[2]
@@ -29,7 +30,7 @@ def score(order):
     path = os.path.join(OUT, "c%d_%d.cpp" % (os.getpid(), counter[0]))
     with open(path, "w", encoding="utf-8", newline="\n") as fh:
         fh.write(render(order))
-    p = subprocess.run([sys.executable, os.path.join(SP, "wdiff.py"), MOD, ADDR, path],
+    p = subprocess.run([sys.executable, os.path.join(KIT, "wdiff.py"), MOD, ADDR, path],
                        capture_output=True, text=True, cwd=REPO)
     os.remove(path)
     head = (p.stdout or "").strip().splitlines()[:1]

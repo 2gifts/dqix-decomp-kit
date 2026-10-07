@@ -13,8 +13,9 @@
 #
 # Serial by construction — ov_recover mutates config/ and gates a full `ninja check`; two at once
 # corrupt each other. Usage: bash recover_sweep.sh
-SP="$(cd "$(dirname "${BASH_SOURCE[0]}")" && { pwd -W 2>/dev/null || pwd; })"
-REPO="${DQIX_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && { pwd -W 2>/dev/null || pwd; })/dqix-decomp}"
+KIT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && { pwd -W 2>/dev/null || pwd; })"
+SP="$(python "$KIT/kitpaths.py" state)"
+REPO="$(python "$KIT/kitpaths.py" repo)"
 cd "$REPO" || exit 2
 LOG="$SP/wlog/sweep.log"
 echo "=== recover_sweep $(date '+%m-%d %H:%M:%S') ===" >> "$LOG"
@@ -24,7 +25,7 @@ echo "=== recover_sweep $(date '+%m-%d %H:%M:%S') ===" >> "$LOG"
 # gate-verified match where nothing looks for it. Measured: 78 addrs a worker declared PASS on are
 # not in the build, 67 of them with a candidate still sitting in scratch; a full gate pass found 38
 # that match TODAY. This stages them into hold_* so the sweep below commits them.
-bash "$SP/wgate_scratch.sh" >> "$LOG" 2>&1
+bash "$KIT/wgate_scratch.sh" >> "$LOG" 2>&1
 
 # ZERO-TOKEN PRODUCERS. These generate and GATE candidate source with no model involved; anything that
 # passes is staged into hold_* and committed by the sweep below. Each is throttled by a stamp file
@@ -39,18 +40,18 @@ _age=999999
 [ -f "$_stamp" ] && _age=$(( $(date +%s) - $(stat -c %Y "$_stamp") ))
 if [ "$_age" -gt 10800 ]; then          # at most once every 3h
   echo "--- zero-token producers (last run ${_age}s ago)" >> "$LOG"
-  timeout 900  python "$SP/synth.py" --sweep 64    >> "$LOG" 2>&1
-  timeout 3600 python "$SP/translate.py" --sweep 256 >> "$LOG" 2>&1
-  timeout 1800 python "$SP/scaffold.py" --all       >> "$LOG" 2>&1
+  timeout 900  python "$KIT/synth.py" --sweep 64    >> "$LOG" 2>&1
+  timeout 3600 python "$KIT/translate.py" --sweep 256 >> "$LOG" 2>&1
+  timeout 1800 python "$KIT/scaffold.py" --all       >> "$LOG" 2>&1
   touch "$_stamp"
   echo "--- zero-token producers done" >> "$LOG"
 fi
 # rank modules by how many DISTINCT matched addrs they hold that are not yet delinked
-MODS=$(python "$SP/recoverable.py" 2>/dev/null | awk '$2>0{print $1}')
+MODS=$(python "$KIT/recoverable.py" 2>/dev/null | awk '$2>0{print $1}')
 [ -z "$MODS" ] && { echo "nothing recoverable" >> "$LOG"; exit 0; }
 
 for M in $MODS; do
-  N=$(python "$SP/recoverable.py" "$M" 2>/dev/null | awk '{print $2}')
+  N=$(python "$KIT/recoverable.py" "$M" 2>/dev/null | awk '{print $2}')
   [ -z "$N" ] && N=0
   [ "$N" -lt 1 ] && continue
   echo "--- $M: $N recoverable" >> "$LOG"
@@ -61,7 +62,7 @@ for M in $MODS; do
   # the strike bookkeeping has been wrong before (30 byte-exact functions were permanently written off
   # that way). Free to re-test: classify runs locally at ~0.3s/func with no build, so a genuinely bad
   # func is dropped before it can cost a single gate.
-  NOSKIP=1 MAXGATES=24 python "$SP/ov_recover.py" "$M" >> "$LOG" 2>&1
+  NOSKIP=1 MAXGATES=24 python "$KIT/ov_recover.py" "$M" >> "$LOG" 2>&1
   # ov_recover gates `ninja check` but does NOT build the ROM or verify the checksum — finish_wave.sh
   # normally does that. Recovery commits are real commits, so they get the same full proof.
   if ! ninja rom >/dev/null 2>&1 || ! ninja sha1 2>&1 | grep -q "OK"; then

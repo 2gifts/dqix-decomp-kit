@@ -6,7 +6,8 @@
 # to every verdict on ov003, ov006, ov024... and a new module's log does not exist when the tail
 # starts, so a glob does not fix it either. This re-globs each pass and remembers the byte offset it
 # has already reported per file, so nothing is missed and nothing is repeated.
-SP="$(cd "$(dirname "${BASH_SOURCE[0]}")" && { pwd -W 2>/dev/null || pwd; })"
+KIT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && { pwd -W 2>/dev/null || pwd; })"
+SP="$(python "$KIT/kitpaths.py" state)"
 EVERY="${1:-60}"
 STATE="$SP/wlog/.verdict_offsets"
 LOG="$SP/wlog/verdictwatch.log"

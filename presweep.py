@@ -28,7 +28,8 @@ import shutil
 import subprocess
 import sys
 
-SP = os.path.dirname(os.path.abspath(__file__))
+SP = _kp.SP
+KIT = _kp.KIT
 REPO = _kp.REPO
 BEST = f"{SP}/clsbest"
 DEPTH = os.environ.get("PRESWEEP_DEPTH", "3")
@@ -49,7 +50,7 @@ def rank(verdict):
 
 
 def gate(mod, addr, path):
-    r = subprocess.run([sys.executable, f"{SP}/wgate.py", mod, addr, path],
+    r = subprocess.run([sys.executable, f"{KIT}/wgate.py", mod, addr, path],
                        capture_output=True, text=True, cwd=REPO)
     return (r.stdout + r.stderr).strip()
 
@@ -77,7 +78,7 @@ def main():
     # a near miss is kept and swept, so the chain synth -> colorsweep can close a cold function for
     # the price of a few compiles.
     if not cand:
-        subprocess.run([sys.executable, f"{SP}/synth.py", mod, addr],
+        subprocess.run([sys.executable, f"{KIT}/synth.py", mod, addr],
                        capture_output=True, text=True, cwd=REPO)
         seeded = f"{SP}/lab/synth_{addr}.cpp"
         if os.path.exists(seeded):
@@ -87,7 +88,7 @@ def main():
     # cost $22.45 to produce its FIRST source. translate gates its own draft, so a MATCH here closes
     # the address for the price of one compile.
     if not cand:
-        tr = subprocess.run([sys.executable, f"{SP}/translate.py", mod, addr],
+        tr = subprocess.run([sys.executable, f"{KIT}/translate.py", mod, addr],
                             capture_output=True, text=True, cwd=REPO, timeout=1800)
         draft = f"{SP}/lab/trans_{addr}.cpp"
         if (tr.stdout or "").strip().startswith("MATCH") and os.path.exists(draft):
@@ -160,7 +161,7 @@ def main():
         w = f"{SP}/handwork/presweep_{addr}_{k}.cpp"
         shutil.copy(p, w)
         try:
-            subprocess.run([sys.executable, f"{SP}/colorsweep.py", mod, addr, w,
+            subprocess.run([sys.executable, f"{KIT}/colorsweep.py", mod, addr, w,
                             "--depth", DEPTH, "--budget", BUDGET, "--apply"],
                            capture_output=True, text=True, cwd=REPO, timeout=TIMEOUT)
         except subprocess.TimeoutExpired:

@@ -19,7 +19,8 @@
 #   bash killfleet.sh --all        kill supervisor, drivers and workers
 #   bash killfleet.sh --orphans    kill only workers whose parent is gone
 #   bash killfleet.sh --dry        report what would be killed, kill nothing
-SP="$(cd "$(dirname "${BASH_SOURCE[0]}")" && { pwd -W 2>/dev/null || pwd; })"
+KIT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && { pwd -W 2>/dev/null || pwd; })"
+SP="$(python "$KIT/kitpaths.py" state)"
 MODE="${1:-workers}"
 DRY=0
 [ "$MODE" = "--dry" ] && { DRY=1; MODE="report"; }
@@ -74,14 +75,14 @@ kill_windows_workers() {
 echo "killfleet: mode=$MODE"
 case "$MODE" in
   --all)
-    kill_posix "$SP/supervise.sh" "supervisor"      # first, or it relaunches the driver mid-kill
+    kill_posix "$KIT/supervise.sh" "supervisor"      # first, or it relaunches the driver mid-kill
     rm -f "$SP/supervise.pid"
     # THE DRIVER IS pull_all.sh. This named only run_all/run_overlay/run_main, all deleted on
     # 2026-08-20, so `killfleet.sh --all` -- the escalation the stop procedure falls back to when
     # something survives -- killed the supervisor, reported success, and left the actual fleet
     # spending. The old names stay in the list because a stale checkout can still have them.
-    kill_posix "$SP/pull_all.sh" "pull_all driver"
-    kill_posix "$SP/pull_worker.sh" "pull workers"
+    kill_posix "$KIT/pull_all.sh" "pull_all driver"
+    kill_posix "$KIT/pull_worker.sh" "pull workers"
     rm -f "$SP/run_all.lock" "$SP/pull_all.pid"
     kill_posix "DQIX decomp worker" "worker wrappers"
     kill_windows_workers 0

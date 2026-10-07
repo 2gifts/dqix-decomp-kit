@@ -13,7 +13,8 @@ _kpsys.path.insert(0, _kpos.path.dirname(_kpos.path.abspath(__file__)))
 import kitpaths as _kp
 import os, re, sys, glob
 
-SP = os.path.dirname(os.path.abspath(__file__))
+SP = _kp.SP
+KIT = _kp.KIT
 REPO = _kp.REPO
 
 
@@ -30,7 +31,7 @@ CHECKS = []
 def _regress():
     """regress.py, run in-process so it cannot be forgotten."""
     import importlib.util as il
-    spec = il.spec_from_file_location("_regress", f"{SP}/regress.py")
+    spec = il.spec_from_file_location("_regress", f"{KIT}/regress.py")
     m = il.module_from_spec(spec)
     spec.loader.exec_module(m)          # the checks run at import
     return m
@@ -46,7 +47,7 @@ def check(name, why):
 @check("gates accept THUMB",
        "an ARM-only keep-raw regex rejected every thumb function in main as NO-DEF")
 def _thumb():
-    if "(?:ARM|THUMB)" not in read(f"{SP}/integrate.py"):
+    if "(?:ARM|THUMB)" not in read(f"{KIT}/integrate.py"):
         return "integrate.py does not accept THUMB definitions"
     return None
 
@@ -55,9 +56,9 @@ def _thumb():
        "a .text-only scan reports size 0 for .init functions and rejects byte-exact sources")
 def _sections():
     for f in ("wdiff.py", "wgate.py"):
-        if "kind:code" not in read(f"{SP}/{f}"):
+        if "kind:code" not in read(f"{KIT}/{f}"):
             return f"{f} does not resolve the section from the delinks table"
-    if "section_for(" not in read(f"{SP}/integrate.py"):
+    if "section_for(" not in read(f"{KIT}/integrate.py"):
         return "integrate.py does not use the address's own section"
     return None
 
@@ -65,9 +66,9 @@ def _sections():
 @check("integrators self-repair",
        "mechanical faults (callee names, .init pragma) park finished matches until found by hand")
 def _autorepair():
-    if not os.path.isfile(f"{SP}/autorepair.py"):
+    if not os.path.isfile(f"{KIT}/autorepair.py"):
         return "autorepair.py is missing"
-    if "_autorepair.repair" not in read(f"{SP}/integrate.py"):
+    if "_autorepair.repair" not in read(f"{KIT}/integrate.py"):
         return "integrate.py does not call autorepair"
     return None
 
@@ -76,12 +77,12 @@ def _autorepair():
        "ov025:021de124 was byte-exact but had to share one object with 021dcf14 and 021de110; one "
        "function per file could not express it, and start-only delink checks re-landed or re-staged it")
 def _tu():
-    s = read(f"{SP}/integrate.py")
+    s = read(f"{KIT}/integrate.py")
     if "for f, addrs in sorted(TU.items()):" not in s or "extra_texts=" not in s:
         return "integrate.py has no multi-function TU path"
     if "_spans" not in s:
         return "integrate.py counts only range STARTS as delinked"
-    if "delinked.py" not in read(f"{SP}/integrate_fast.sh"):
+    if "delinked.py" not in read(f"{KIT}/integrate_fast.sh"):
         return "integrate_fast.sh clears staging by range start, so a TU's later functions stay staged"
     return None
 
@@ -89,7 +90,7 @@ def _tu():
 @check("KEEP-NAME suppresses renaming",
        "keep-raw would rename a mangled C++ ROM symbol to func_<addr> and break the match")
 def _keepname():
-    s = read(f"{SP}/integrate.py")
+    s = read(f"{KIT}/integrate.py")
     if "keepname" not in s or "not keepname and" not in s:
         return "integrate.py does not honour KEEP-NAME"
     return None
@@ -99,7 +100,7 @@ def _keepname():
        "a function needing a later mwccarm gates on the wrong compiler and reads as a mismatch")
 def _ccovr():
     for f in ("wgate.py", "classify.py", "integrate.py"):
-        if "cc_for(" not in read(f"{SP}/{f}"):
+        if "cc_for(" not in read(f"{KIT}/{f}"):
             return f"{f} ignores tools/cc_overrides.txt"
     if not os.path.isfile(f"{REPO}/tools/cc_overrides.txt"):
         return "tools/cc_overrides.txt is missing"
@@ -116,7 +117,7 @@ def _ccovr():
 @check("integrator output is kept",
        "swallowing it turns every rejection into a bare 'wired-0 -> defer' with no reason")
 def _logged():
-    s = read(f"{SP}/ov_recover.py")
+    s = read(f"{KIT}/ov_recover.py")
     if "integ_{SUF}" not in s:
         return "ov_recover.py does not record the integrator's output"
     return None
@@ -128,9 +129,9 @@ def _sweep():
     # pull_all.sh replaced run_all.sh on 2026-08-20; this kept asserting against the dead file, so
     # the invariant went red for a reason nobody could act on while the real gap -- no dispatcher
     # ran the sweep at all -- stayed invisible behind it.
-    if "repairsweep.py" not in read(f"{SP}/pull_all.sh"):
+    if "repairsweep.py" not in read(f"{KIT}/pull_all.sh"):
         return "pull_all.sh never runs the repair sweep"
-    if "staging/" not in read(f"{SP}/repairsweep.py"):
+    if "staging/" not in read(f"{KIT}/repairsweep.py"):
         return "repairsweep.py does not stage hits into the gated wave path"
     return None
 
@@ -215,10 +216,10 @@ def _hand_work_recorded():
        "the GameState merge renamed 148 functions and 243 parked sources kept the old names, so each "
        "gated NO-COMPILE or UNDEF-SYM and no free sweep could ever land one")
 def _repooled():
-    if "repool.py" not in read(f"{SP}/merge_human.sh"):
+    if "repool.py" not in read(f"{KIT}/merge_human.sh"):
         return "merge_human.sh no longer runs pad/repool.py after a merge"
     import importlib.util as il
-    spec = il.spec_from_file_location("_repool", f"{SP}/pad/repool.py")
+    spec = il.spec_from_file_location("_repool", f"{KIT}/pad/repool.py")
     R = il.module_from_spec(spec)
     spec.loader.exec_module(R)
     rev = read(f"{SP}/wlog/last_merge_base.txt").strip() or "a70058a0"
@@ -259,7 +260,7 @@ def _skills_have_no_state():
        "control itself, so removing the gate fails the build rather than silently restoring the "
        "state where a lever costs one worker to find and reaches no other")
 def _lever_gate_is_wired():
-    src = open(f"{SP}/pull_all.sh", encoding="utf-8", errors="replace").read()
+    src = open(f"{KIT}/pull_all.sh", encoding="utf-8", errors="replace").read()
     if "levercheck.py" not in src:
         return "pull_all.sh no longer calls levercheck.py -- the lever gate is gone"
     # It has to gate the CLAIM. Calling it and logging the result is the advisory version that
@@ -282,7 +283,7 @@ def _lever_gate_is_wired():
         return "levercheck.py is called but does not suppress claiming -- advisory, not a gate"
     if not re.search(r"for \(\(s=1;.*\n\s*\[ -n \"\$hold_claims\" \] && break", src):
         return "slot refill does not break on hold_claims"
-    if "levercheck.py" not in read(f"{SP}/claim.py"):
+    if "levercheck.py" not in read(f"{KIT}/claim.py"):
         return "claim.py does not check the gate, so a live slot claims straight through a hold"
     return None
 
@@ -299,7 +300,7 @@ def _ninja_has_a_target():
     bare_sh = re.compile(r"""(?<![\w./"'-])ninja(?:\s+-\S+)*\s*(?:$|[;&|)>])""", re.M)
     bare_py = re.compile(r"""[\[(]\s*["']ninja["']\s*[\])]""")
     bad = []
-    for f in _g.glob(f"{SP}/*.py") + _g.glob(f"{SP}/*.sh") + _g.glob(f"{SP}/rebuild/*.sh") \
+    for f in _g.glob(f"{KIT}/*.py") + _g.glob(f"{KIT}/*.sh") + _g.glob(f"{SP}/rebuild/*.sh") \
             + _g.glob(f"{SP}/rebuild/*.py"):
         if os.path.basename(f).startswith("_"):
             continue
@@ -315,7 +316,7 @@ def _ninja_has_a_target():
        "night's attempts did not survive that -- 02093b90 at BYTEDIFF 14 and 02069fec at 63 among "
        "them, both within reach of a sweep. Paid work that leaves no file is paid twice")
 def _attempt_kept():
-    src = open(os.path.join(SP, "pull_worker.sh"), encoding="utf-8").read()
+    src = open(os.path.join(KIT, "pull_worker.sh"), encoding="utf-8").read()
     i = src.find("v=miss")
     if i < 0:
         return "pull_worker.sh no longer has a miss branch this check can find"
@@ -366,10 +367,10 @@ def _stranded():
        "is one nobody can decide to trust, fix or delete")
 def _inventoried():
     import glob as _g
-    inv = read(f"{SP}/INVENTORY.md")
+    inv = read(f"{KIT}/INVENTORY.md")
     if not inv:
         return "INVENTORY.md is missing"
-    undocumented = [os.path.basename(f) for f in _g.glob(f"{SP}/*.py") + _g.glob(f"{SP}/*.sh")
+    undocumented = [os.path.basename(f) for f in _g.glob(f"{KIT}/*.py") + _g.glob(f"{KIT}/*.sh")
                     if not os.path.basename(f).startswith("_")
                     and os.path.basename(f) not in inv]
     return f"{len(undocumented)} undocumented: {sorted(undocumented)[:6]}" if undocumented else None
@@ -381,7 +382,7 @@ def _inventoried():
 def _no_range_starts():
     import glob as _g
     bad = []
-    for f in _g.glob(f"{SP}/*.py") + _g.glob(f"{SP}/*.sh"):
+    for f in _g.glob(f"{KIT}/*.py") + _g.glob(f"{KIT}/*.sh"):
         base = os.path.basename(f)
         if base in ("selfcheck.py",) or base.startswith("_"):
             continue
@@ -398,7 +399,7 @@ def _no_range_starts():
 def _no_stale_session():
     import glob as _g
     bad = []
-    for f in _g.glob(f"{SP}/*.py") + _g.glob(f"{SP}/*.sh"):
+    for f in _g.glob(f"{KIT}/*.py") + _g.glob(f"{KIT}/*.sh"):
         if os.path.basename(f).startswith("_"):
             continue
         if re.search(r"Temp[/\\]claude[/\\]|[A-Za-z]:[/\\]Users[/\\]", read(f)):
@@ -415,7 +416,7 @@ def _all_parse():
     import glob as _g
     import subprocess
     bad = []
-    for f in _g.glob(f"{SP}/*.py"):
+    for f in _g.glob(f"{KIT}/*.py"):
         if os.path.basename(f).startswith("_"):
             continue
         try:
@@ -428,14 +429,14 @@ def _all_parse():
     shell = None
     for cand in (r"C:\Program Files\Git\bin\bash.exe", r"C:\Program Files\Git\usr\bin\bash.exe", "bash"):
         try:
-            probe = subprocess.run([cand, "-n", f"{SP}/selfcheck.py"], capture_output=True, text=True)
+            probe = subprocess.run([cand, "-n", f"{KIT}/selfcheck.py"], capture_output=True, text=True)
             if "No such file or directory" not in (probe.stderr or ""):
                 shell = cand
                 break
         except OSError:
             continue
     if shell:
-        for f in _g.glob(f"{SP}/*.sh"):
+        for f in _g.glob(f"{KIT}/*.sh"):
             if os.path.basename(f).startswith("_"):
                 continue
             r = subprocess.run([shell, "-n", f], capture_output=True, text=True)
@@ -450,19 +451,19 @@ def _all_parse():
        "invocation surfaces mid-wave, hours later, as a failure with no obvious cause")
 def _no_dangling_invocations():
     import glob as _g
-    live = [f for f in _g.glob(f"{SP}/*.py") + _g.glob(f"{SP}/*.sh")
+    live = [f for f in _g.glob(f"{KIT}/*.py") + _g.glob(f"{KIT}/*.sh")
             if not os.path.basename(f).startswith("_")]
-    # Only `$SP/x.py` / `{SP}/x.sh` references: those unambiguously name a scratchpad script. A
-    # looser match flagged docstring examples ("python $SP/x.py") and tools/configure.py, which
+    # Only `$KIT/x.py` / `{KIT}/x.sh` references: those unambiguously name a kit script. A
+    # looser match flagged docstring examples ("python $KIT/x.py") and tools/configure.py, which
     # lives in the repo -- and a check that cries wolf is a check nobody reads.
-    call = re.compile(r"[{$]SP[}]?/([A-Za-z0-9_]+\.(?:sh|py))")
+    call = re.compile(r"[{$]KIT[}]?/([A-Za-z0-9_]+\.(?:sh|py))")
     missing = []
     for f in live:
         # strip comments so prose about an archived file is not read as a call
         txt = "\n".join(re.sub(r"(^|\s)#.*$", "", l) for l in read(f).split("\n"))
         for m in call.finditer(txt):
             dep = m.group(1)
-            if not os.path.isfile(f"{SP}/{dep}"):
+            if not os.path.isfile(f"{KIT}/{dep}"):
                 missing.append(f"{os.path.basename(f)} -> {dep}")
     return f"dangling invocation(s): {sorted(set(missing))[:5]}" if missing else None
 
@@ -472,7 +473,7 @@ def _no_dangling_invocations():
        "cleanly and emitted _Z49_Z23... -- a symbol in no ROM -- which then went into symbols.txt "
        "and failed `dsd check symbols` for the whole build")
 def _autorepair_symbol():
-    s = read(f"{SP}/autorepair.py")
+    s = read(f"{KIT}/autorepair.py")
     if "_emits_symbol" not in s:
         return "autorepair.py does not check the emitted symbol name"
     if "_text_emits" not in s:
@@ -486,7 +487,7 @@ def _autorepair_symbol():
 def _no_name_keyed():
     import glob as _g
     bad = []
-    for f in _g.glob(f"{SP}/*.py") + _g.glob(f"{SP}/*.sh"):
+    for f in _g.glob(f"{KIT}/*.py") + _g.glob(f"{KIT}/*.sh"):
         base = os.path.basename(f)
         if base in ("selfcheck.py", "auditlint.py") or base.startswith("_"):
             continue          # these two legitimately contain the pattern as a search string
@@ -505,7 +506,7 @@ def _no_name_keyed():
        "0 of 10 had ever been promoted, including the one that closed the first >1KB match")
 def _levers_promoted():
     import subprocess as _sp
-    r = _sp.run([sys.executable, f"{SP}/levercheck.py"], capture_output=True, text=True)
+    r = _sp.run([sys.executable, f"{KIT}/levercheck.py"], capture_output=True, text=True)
     if r.returncode == 0:
         return None
     bad = [l.strip().split()[0] for l in r.stdout.split("\n") if l.startswith("  ")]
@@ -518,12 +519,12 @@ def _levers_promoted():
        "in one case and 193 in another under identical configuration. wgate writing every verdict "
        "to wlog/gates/ is what lets it count gates since the last improvement and print STOP")
 def _gate_history():
-    src = read(f"{SP}/wgate.py")
+    src = read(f"{KIT}/wgate.py")
     if "gatelog.record(" not in src:
         return "wgate.py no longer records gate history -- the STOP banner cannot be computed"
     if "gatelog.banner(" not in src:
         return "wgate.py records history but never prints the banner, so no worker ever sees STOP"
-    if "STOP:" not in read(f"{SP}/gatelog.py"):
+    if "STOP:" not in read(f"{KIT}/gatelog.py"):
         return "gatelog.py no longer emits a STOP directive"
     return None
 
@@ -533,7 +534,7 @@ def _gate_history():
        "push-list composition, umull pair swap, scratch scheduling and if-conversion -- and nothing "
        "could rank which was worth cracking. The class now comes from the gate, not the worker")
 def _typed_verdict():
-    src = read(f"{SP}/pull_worker.sh")
+    src = read(f"{KIT}/pull_worker.sh")
     if "BLOCKED $ADDR" not in src:
         return "pull_worker.sh no longer asks for a BLOCKED <CLASS> verdict"
     if re.search(r"SKIP \$ADDR <reason>", src):
@@ -547,7 +548,7 @@ def _typed_verdict():
        "the miss side had no counterpart to the lever gate: a residue class that recurs was paid "
        "for once per function, forever, because nothing held the fleet until one member was cracked")
 def _blocker_gate_is_wired():
-    src = read(f"{SP}/pull_all.sh")
+    src = read(f"{KIT}/pull_all.sh")
     if "blockercheck.py" not in src:
         return "pull_all.sh no longer calls blockercheck.py -- the blocker gate is gone"
     lines = src.split("\n")
@@ -557,7 +558,7 @@ def _blocker_gate_is_wired():
         return "blockercheck.py is not the condition of an `if !` -- the gate is disabled"
     if not any("hold_claims" in l for l in lines[at:at + 12]):
         return "the blocker gate does not suppress claiming -- it reports instead of holding"
-    if "blockercheck.py" not in read(f"{SP}/claim.py"):
+    if "blockercheck.py" not in read(f"{KIT}/claim.py"):
         return "claim.py does not check the gate, so a live slot claims straight through a hold"
     return None
 
@@ -567,7 +568,7 @@ def _blocker_gate_is_wired():
        "0204bc74 and 0204fbf8 each appear twice in one verdict log with different diagnoses -- so "
        "the second session paid full price to reproduce a verdict already on disk")
 def _no_cold_reserve():
-    src = read(f"{SP}/claim.py")
+    src = read(f"{KIT}/claim.py")
     if "blocked_addrs" not in src:
         return "claim.py no longer filters recently-blocked addresses"
     if "blockers.tsv" not in src:
@@ -582,7 +583,7 @@ def _no_cold_reserve():
        "waste this project has measured -- hold/ and quarantine/ stranded work for weeks -- and a "
        "kept artifact outside the pool list would make every pass re-derive the same best again")
 def _clsbest_is_swept():
-    src = read(f"{SP}/repairsweep.py")
+    src = read(f"{KIT}/repairsweep.py")
     if "clsbest" not in src:
         return "repairsweep no longer keeps the best sub-MATCH artifact"
     at = src.find("pools = sorted(")
@@ -599,7 +600,7 @@ def _clsbest_is_swept():
        "that discarded the entire rebase -- 946 commits -- and only the reflog got them back. The "
        "current branch's HEAD is the last green state, whatever the branch is called")
 def _no_remote_reset():
-    for p in sorted(glob.glob(f"{SP}/*.sh")) + sorted(glob.glob(f"{SP}/*.py")):
+    for p in sorted(glob.glob(f"{KIT}/*.sh")) + sorted(glob.glob(f"{KIT}/*.py")):
         for i, line in enumerate(read(p).splitlines()):
             if line.lstrip().startswith("#"):
                 continue
@@ -613,7 +614,7 @@ def _no_remote_reset():
        "rewrites it. When the verdict is OVERGEN the edit stays, the clobber guard sees a dirty "
        "tracked file and defers the whole pass -- main held six such files and could land nothing")
 def _rejected_edits_reverted():
-    src = read(f"{SP}/ov_recover.py")
+    src = read(f"{KIT}/ov_recover.py")
     if "REVERT-REJECTED" not in src:
         return "ov_recover does not revert tracked files whose candidate was rejected"
     at = src.find("REVERT-REJECTED")
@@ -628,7 +629,7 @@ def _rejected_edits_reverted():
        "matches $STAGE/<addr>.cpp, so every MATCH was swept out of staging -- and integration is "
        "triggered by counting staging/*/*.cpp, so no worker match could land at all")
 def _match_survives_sweep():
-    src = read(f"{SP}/pull_worker.sh")
+    src = read(f"{KIT}/pull_worker.sh")
     at = src.find("swept ${_swept} non-final file(s)")
     if at < 0:
         return "pull_worker.sh no longer sweeps staging -- this invariant needs rewriting"
@@ -649,7 +650,7 @@ def _match_survives_sweep():
        "the recipe budget because they are written ABOVE the recipes and a worker's Read is "
        "truncated from the back, which is how the recipes once reached zero sessions")
 def _prior_attempts_shown():
-    src = read(f"{SP}/recipe_select.py")
+    src = read(f"{KIT}/recipe_select.py")
     if "prior_attempts" not in src:
         return "recipe_select.py no longer shows earlier attempts"
     if "attempt_blocks" not in src or "rbytes" not in src:
@@ -659,11 +660,11 @@ def _prior_attempts_shown():
     at = src.find("rbytes = ")
     if "len(index)" not in src[at:at + 260]:
         return "the sidecar index is not charged against the recipe budget"
-    if "EARLIER ATTEMPTS" not in read(f"{SP}/pull_worker.sh"):
+    if "EARLIER ATTEMPTS" not in read(f"{KIT}/pull_worker.sh"):
         return "the prompt does not tell the worker to read the earlier-attempts file"
     if "deadends.md" not in src:
         return "per-address dead ends are not injected for the address being worked"
-    core = read(f"{SP}/worker_src/core.md")
+    core = read(f"{KIT}/worker_src/core.md")
     if "MEASURED DEAD ENDS" in core:
         return "address-keyed dead ends are back in the shared recipe doc"
     big = [(p, os.path.getsize(p)) for p in glob.glob(f"{SP}/doc_cache/*.md")
@@ -681,7 +682,7 @@ def _prior_attempts_shown():
        "cut looked the address up in priority_<mod>.txt and could never fire, because claim.py "
        "strikes an address out of that file the moment it serves it")
 def _nearmiss_cap():
-    src = read(f"{SP}/pull_worker.sh")
+    src = read(f"{KIT}/pull_worker.sh")
     if "CAP_NEARMISS" not in src:
         return "pull_worker.sh no longer caps a near-miss session"
     at = src.find("CAP_NEARMISS")
@@ -690,7 +691,7 @@ def _nearmiss_cap():
         return "the cap is keyed on the priority queue, which is emptied before the cap is computed"
     if "--residue" not in src:
         return "pull_worker.sh does not ask nearmiss.py for the measured residue"
-    if "--residue" not in read(f"{SP}/nearmiss.py"):
+    if "--residue" not in read(f"{KIT}/nearmiss.py"):
         return "nearmiss.py has no --residue mode for the dispatcher to ask"
     return None
 
@@ -703,7 +704,7 @@ def _nearmiss_cap():
        "artifact mtime lets a rewritten-but-not-better file through, and comparing against the "
        "newest ledger row lets a REGRESSING session re-open its own address")
 def _nearmiss_reserve():
-    src = read(f"{SP}/nearmiss.py")
+    src = read(f"{KIT}/nearmiss.py")
     if "pull_*_" not in src or "_last_paid" not in src:
         return "nearmiss.py no longer looks at whether an address was already paid for"
     for p in glob.glob(f"{SP}/wlog/priority_*.txt"):
@@ -731,7 +732,7 @@ def _nearmiss_reserve():
        "sessions as one-insight jobs, 0 of 3 for $16.90. blockers_declined.txt already held the "
        "evidence for both classes and nothing in the queue path read it")
 def _nearmiss_declined():
-    src = read(f"{SP}/nearmiss.py")
+    src = read(f"{KIT}/nearmiss.py")
     if "blockers_declined" not in src:
         return "nearmiss.py does not read blockers_declined.txt"
     gone = set()
@@ -757,7 +758,7 @@ def _nearmiss_declined():
        "regenerating watcher kept re-offering the four register permutations colorsweep was "
        "already sweeping for free")
 def _nearmiss_queue_live():
-    src = read(f"{SP}/nearmiss.py")
+    src = read(f"{KIT}/nearmiss.py")
     if "blockers.tsv" not in src:
         return "nearmiss.py no longer reads the measured ledger"
     if "priority_" not in src:
@@ -772,7 +773,7 @@ def _nearmiss_queue_live():
         return "nearmiss.py takes the LATEST verdict, so a regressing session deletes a near-miss"
     # EVERY writer into attempts/ needs the guard, not just the one that was fixed first. Guarding
     # the keep-copy alone left the staging sweep destroying 02079cf8's 3-byte artifact minutes later.
-    worker = read(f"{SP}/pull_worker.sh")
+    worker = read(f"{KIT}/pull_worker.sh")
     writes = [i for i, ln in enumerate(worker.splitlines())
               if re.search(r'(cp|mv) "[^"]+" "\$SP/attempts/', ln)
               or re.search(r'(cp|mv) "\$[a-z_]+" "\$_(dst|sd)"', ln)]
@@ -782,8 +783,8 @@ def _nearmiss_queue_live():
     for i in writes:
         if not any("cmp -s" in l for l in lines[max(0, i - 8):i]):
             return f"pull_worker.sh:{i + 1} writes attempts/ without the no-overwrite guard"
-    watch = f"{SP}/nearmiss_watch.sh"
-    if not os.path.exists(watch) and "nearmiss.py" not in read(f"{SP}/pull_all.sh"):
+    watch = f"{KIT}/nearmiss_watch.sh"
+    if not os.path.exists(watch) and "nearmiss.py" not in read(f"{KIT}/pull_all.sh"):
         return "nothing regenerates the queue -- it decays from the moment it is built"
     res = f"{SP}/wlog/nearmiss_reserved.txt"
     if os.path.exists(res):
@@ -803,7 +804,7 @@ def _nearmiss_queue_live():
        "matches uncommitted for six hours while the live slots, which claim through claim.py "
        "themselves, spent ~$18 more -- the hold stopped the free half and not the paid half")
 def _hold_spares_integration():
-    src = read(f"{SP}/pull_all.sh")
+    src = read(f"{KIT}/pull_all.sh")
     for gate in ("levercheck.py", "blockercheck.py"):
         at = src.find(gate)
         if at < 0:
@@ -814,7 +815,7 @@ def _hold_spares_integration():
             return f"the {gate} hold still `continue`s the loop, skipping integration"
     if "hold_claims" not in src:
         return "pull_all.sh no longer suppresses slot refill on a hold"
-    claim = read(f"{SP}/claim.py")
+    claim = read(f"{KIT}/claim.py")
     if "levercheck.py" not in claim or "blockercheck.py" not in claim:
         return "claim.py does not check the gates, so a live slot claims straight through a hold"
     return None
@@ -832,7 +833,7 @@ def _hold_spares_integration():
 def _delink_regex_anchored():
     trigger = re.compile(r"start:0x\([^)]*\)\s*end")
     bad = []
-    for p in sorted(glob.glob(f"{SP}/*.py")):
+    for p in sorted(glob.glob(f"{KIT}/*.py")):
         if os.path.basename(p) == "selfcheck.py":
             continue
         lines = read(p).splitlines()
@@ -852,9 +853,9 @@ def _delink_regex_anchored():
        "asked the WORKER to run it, spending tokens on a gated, meaning-preserving rewrite that "
        "costs only CPU. A session should never be the first thing to try a mechanical rule")
 def _presweep_before_claim():
-    if not os.path.exists(f"{SP}/presweep.py"):
+    if not os.path.exists(f"{KIT}/presweep.py"):
         return "presweep.py is gone -- nothing runs the rules before a claim"
-    w = read(f"{SP}/pull_worker.sh")
+    w = read(f"{KIT}/pull_worker.sh")
     if "presweep.py" not in w:
         return "pull_worker.sh does not pre-sweep the address it just claimed"
     ci = w.find("ADDR=$(python")
@@ -871,14 +872,14 @@ def _presweep_before_claim():
         return "the session's own artifact is never swept -- it waits for the hourly pass"
     if w.find("postsweep") < w.find("presweep MATCHED"):
         return "the post-session sweep runs before the session, not after it"
-    if not os.path.exists(f"{SP}/presweep_watch.sh"):
+    if not os.path.exists(f"{KIT}/presweep_watch.sh"):
         return "nothing sweeps the queue ahead of a claim, so every claim waits for the rules"
     if "--force" not in w:
         return "the post-session sweep honours the already-swept marker and will skip its own new file"
     # THE DEEP SWEEP BELONGS TO THE PASS NOBODY WAITS ON. At claim time a three-candidate sweep ate
     # the whole 240s budget on main:02079cf8, was killed by the timeout, and the partial work was
     # thrown away while a slot idled five minutes.
-    if "--deep" not in read(f"{SP}/presweep_watch.sh"):
+    if "--deep" not in read(f"{KIT}/presweep_watch.sh"):
         return "the advance sweeper does not ask for the multi-candidate pass"
     if "--deep" in w:
         return "the claim path asks for the deep sweep and will block a slot on it"
@@ -886,7 +887,7 @@ def _presweep_before_claim():
     # whether anything starts the advance sweeper. It died with the 2026-09-08 session, no dispatcher
     # relaunches it, and on 2026-09-09 two paid workers hand-derived r11 and r35 -- rules colorsweep
     # already had and would have applied for the price of a compile.
-    if "presweep_watch" not in read(f"{SP}/pull_all.sh"):
+    if "presweep_watch" not in read(f"{KIT}/pull_all.sh"):
         return "no dispatcher starts presweep_watch.sh, so it runs only while someone remembers to"
     return None
 
@@ -898,7 +899,7 @@ def _presweep_before_claim():
        "2026-09-08, and three presweep_watch loops stacked the same way")
 def _single_instance():
     for f in ("pull_all.sh", "presweep_watch.sh", "nearmiss_watch.sh"):
-        s = read(f"{SP}/{f}")
+        s = read(f"{KIT}/{f}")
         if not s:
             continue
         if "kill -0" not in s or ".pid" not in s:
@@ -912,7 +913,7 @@ def _single_instance():
        "unpromoted lever with a full queue and zero workers was watched by nothing. It idled from "
        "13:26 to 14:59 on 2026-09-08 and was found by hand. The hold is correct; the silence was not")
 def _held_fleet_alerts():
-    src = read(f"{SP}/health.sh")
+    src = read(f"{KIT}/health.sh")
     if "ZERO workers" not in src:
         return "health.sh has no zero-worker check -- a held dispatcher is invisible"
     if "HELD_MIN" not in src:
@@ -929,12 +930,12 @@ def _held_fleet_alerts():
        "recipe would unlock and it tripped nothing at all -- SCHED reached 8 members, two of them "
        "hand-cracked and never written up as a colorsweep rule, while the ledger read 0 pending")
 def _crack_signal_routed():
-    src = read(f"{SP}/blockercheck.py")
+    src = read(f"{KIT}/blockercheck.py")
     if "CRACK:" not in src:
         return "blockercheck no longer emits a CRACK line for a class of distinct blocked functions"
     if "if len(v) > 1" in src and "openn" not in src:
         return "blockercheck counts repeats only, so a class of single failures is invisible"
-    if "CRACK" not in read(f"{SP}/health.sh"):
+    if "CRACK" not in read(f"{KIT}/health.sh"):
         return "nothing surfaces blockercheck's CRACK lines -- the signal reaches no one"
     return None
 
@@ -995,10 +996,10 @@ def _focus_ratio():
        "every already-promoted lever while the dispatcher's own hold read zero. A monitor that "
        "cries wolf on 40 handled levers is a monitor nobody reads the 41st line of")
 def _lever_readers_agree():
-    watch = read(f"{SP}/leverwatch.sh")
-    if "levercheck.py --keys" in watch:
+    watch = read(f"{KIT}/leverwatch.sh")
+    if re.search(r'levercheck\.py"? --keys', watch):
         return None
-    chk = read(f"{SP}/levercheck.py")
+    chk = read(f"{KIT}/levercheck.py")
     for doc in ("core.md", "deadends.md"):
         if doc in chk and doc not in watch:
             return f"levercheck.py consults {doc} and leverwatch.sh does not"
@@ -1027,7 +1028,7 @@ def _fullstop_sees_watchers():
         sh = "C:/Program Files/Git/bin/bash.exe"
         if not os.path.exists(sh):
             sh = "bash"
-        out = subprocess.run([sh, f"{SP}/fullstop.sh", "--dry"],
+        out = subprocess.run([sh, f"{KIT}/fullstop.sh", "--dry"],
                              capture_output=True, text=True, timeout=180).stdout
         tier3 = out.split("TIER 3")[-1]
         if "none running" in tier3 or "watcher process(es)" not in tier3:
@@ -1051,7 +1052,7 @@ def _fullstop_sees_watchers():
        "question, two implementations, which is this pipeline's most expensive recurring shape")
 def _staging_purged_before_copy():
     for name in ("integrate_fast.sh", "finish_wave.sh"):
-        src = read(f"{SP}/{name}")
+        src = read(f"{KIT}/{name}")
         if not src:
             return f"{name} is missing"
         lines = src.splitlines()
@@ -1073,7 +1074,7 @@ def _staging_purged_before_copy():
        "a producer that can end quietly")
 def _job_announces_end():
     for name in ("integrate_fast.sh",):
-        src = read(f"{SP}/{name}")
+        src = read(f"{KIT}/{name}")
         if not src:
             return f"{name} is missing"
         if not re.search(r"(?m)^\s*trap\s+\S+\s+EXIT", src):
@@ -1094,7 +1095,7 @@ def _wgate_refuses_pragma():
     env = {k: v for k, v in os.environ.items()
            if k not in ("WGATE_ALLOW_COMMITTED", "WGATE_ALLOW_PRAGMA")}
     try:
-        r = subprocess.run([sys.executable, f"{SP}/wgate.py", "main", "02065990", probe],
+        r = subprocess.run([sys.executable, f"{KIT}/wgate.py", "main", "02065990", probe],
                            capture_output=True, text=True, env=env)
     finally:
         os.remove(probe)
@@ -1131,7 +1132,7 @@ def _pragma_ratchet():
        "symbol size) leaves the function below 100% in the report")
 def _countfix_holds():
     for name in ("integrate_fast.sh", "finish_wave.sh"):
-        if "countfix.py" not in (read(f"{SP}/{name}") or ""):
+        if "countfix.py" not in (read(f"{KIT}/{name}") or ""):
             return f"{name} does not run countfix.py"
     import countfix
     try:
@@ -1148,14 +1149,14 @@ def _countfix_holds():
        "relaunched evolve runs that stopped improving were ~75% of massive-function spend, and "
        "random-explore children bought 1 of ~15 improvements")
 def _evolve_capped():
-    wf = read(f"{SP}/.claude/workflows/dqix-evolve.js") or ""
+    wf = read(f"{KIT}/.claude/workflows/dqix-evolve.js") or ""
     if not wf:
         return ".claude/workflows/dqix-evolve.js is missing"
     if "evocap.py" not in wf:
         return "dqix-evolve.js never runs evocap.py"
     if not re.search(r"const EXPLORE = A\.explore === undefined \? 0 :", wf):
         return "dqix-evolve.js defaults explore to a nonzero width"
-    if not os.path.exists(f"{SP}/evocap.py"):
+    if not os.path.exists(f"{KIT}/evocap.py"):
         return "evocap.py is missing"
     return None
 

@@ -796,9 +796,9 @@ register discipline: it colours r7/r8/sb where the ROM uses r4/r5/r6. **Declarat
 move that** — as-is, reversed, high-first and low-first all emit exactly `0x2880`, because
 allocation follows USE order. Do not re-run that experiment.
 
-`$SP/pad/c04_gencases.py` mechanically emits the 30 trivially-shaped cases and they are all already
+`$KIT/pad/c04_gencases.py` mechanically emits the 30 trivially-shaped cases and they are all already
 written. The remaining work is genuinely 79 distinct shapes over 124 blocks
-(`$SP/pad/c04_shapes.py`) — there is no repeated shape left to exploit, which is exactly why this
+(`$KIT/pad/c04_shapes.py`) — there is no repeated shape left to exploit, which is exactly why this
 function is expensive.
 
 ### Other open residues

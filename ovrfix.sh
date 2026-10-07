@@ -10,8 +10,9 @@
 # Usage: ovrfix.sh <mod> <addr> [model]
 # The session must produce a source that matches with NO override. It may not touch the override
 # table, and it may not change what the function does.
-SP="$(cd "$(dirname "${BASH_SOURCE[0]}")" && { pwd -W 2>/dev/null || pwd; })"
-REPO="${DQIX_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && { pwd -W 2>/dev/null || pwd; })/dqix-decomp}"
+KIT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && { pwd -W 2>/dev/null || pwd; })"
+SP="$(python "$KIT/kitpaths.py" state)"
+REPO="$(python "$KIT/kitpaths.py" repo)"
 MOD="$1"; ADDR="$2"; MODEL="${3:-sonnet}"
 [ -z "$ADDR" ] && { echo "usage: ovrfix.sh <mod> <addr> [model]"; exit 2; }
 
@@ -33,16 +34,16 @@ override is not a property of this function, it is hiding a mistake in OUR sourc
 find that mistake.
 
   working copy : $OUT/$ADDR.cpp   (a copy of the committed $SRC)
-  gate         : python $SP/wgate.py $MOD $ADDR $OUT/$ADDR.cpp
+  gate         : python $KIT/wgate.py $MOD $ADDR $OUT/$ADDR.cpp
                  (set WGATE_ALLOW_COMMITTED=1; it MUST print MATCH with no MWCC= and no override)
-  diff         : python $SP/wdiff.py $MOD $ADDR $OUT/$ADDR.cpp
-  listing      : python $SP/wlist.py $MOD $ADDR
-  doc          : $SP/worker_src/core.md
+  diff         : python $KIT/wdiff.py $MOD $ADDR $OUT/$ADDR.cpp
+  listing      : python $KIT/wlist.py $MOD $ADDR
+  doc          : $KIT/worker_src/core.md
 
-Compare the two compilers to LOCATE the difference -- \`MWCC=$OVR python $SP/wgate.py ...\` matches,
+Compare the two compilers to LOCATE the difference -- \`MWCC=$OVR python $KIT/wgate.py ...\` matches,
 the default does not, so whatever the newer compiler folds away is what our C is doing wrong. Known
 shapes: a redundant local the original re-read, a value cached that the ROM reloads, a definition
-order that hands two values each other's registers (try python $SP/pad/permorder.py), an expression
+order that hands two values each other's registers (try python $KIT/pad/permorder.py), an expression
 associated differently.
 
 RULES: do not edit tools/cc_overrides.txt. Do not change behaviour. No assembly. No subagents.
@@ -51,7 +52,7 @@ saying exactly which construct the two compilers disagree on." \
   --output-format json --model "$MODEL" --permission-mode bypassPermissions \
   >> "$LOG" 2>&1
 
-if WGATE_ALLOW_COMMITTED=1 python "$SP/wgate.py" "$MOD" "$ADDR" "$OUT/$ADDR.cpp" 2>&1 | tail -1 | grep -q "^MATCH"; then
+if WGATE_ALLOW_COMMITTED=1 python "$KIT/wgate.py" "$MOD" "$ADDR" "$OUT/$ADDR.cpp" 2>&1 | tail -1 | grep -q "^MATCH"; then
   echo "$(date '+%H:%M') ovrfix $ADDR MATCHES at the default -- copy over $SRC and drop the override" >> "$LOG"
   echo "MATCH $ADDR"
 else

@@ -4,8 +4,10 @@
                                   copy the agent-neutral skills into .agents/skills/
     python kit_init.py --refs     also clone the reference decomps in refs/VERIFIED.txt and index them
     python kit_init.py --slow     also run the end-to-end crack tests (regress.py --slow)
+    python kit_init.py --state D  keep state in directory D (written to state.path; must be outside the kit)
 
-The decomp checkout is $DQIX_REPO, or ../dqix-decomp next to the kit.
+The decomp checkout is $DQIX_REPO, or ../dqix-decomp next to the kit. State is $DQIX_STATE, else the
+path in state.path, else ../dqix-kit-state next to the kit.
 """
 import argparse
 import importlib.util
@@ -17,6 +19,7 @@ import sys
 import kitpaths
 
 SP = kitpaths.SP
+KIT = kitpaths.KIT
 REPO = kitpaths.REPO
 
 STATE_DIRS = ["wlog", "wlog/gates", "wip", "staging", "handwork", "attempts", "claims", "scaffold",
@@ -77,26 +80,26 @@ def make_state():
         os.makedirs(os.path.join(SP, d), exist_ok=True)
     ow = os.path.join(SP, "OPEN_WORK.md")
     if not os.path.exists(ow):
-        shutil.copyfile(os.path.join(SP, "OPEN_WORK.template.md"), ow)
+        shutil.copyfile(os.path.join(KIT, "OPEN_WORK.template.md"), ow)
         print("ok    created OPEN_WORK.md")
     print(f"ok    state directories under {SP}")
 
 
 def mirror_skills():
     for name in PORTABLE_SKILLS:
-        shutil.copytree(os.path.join(SP, ".claude", "skills", name),
-                        os.path.join(SP, ".agents", "skills", name), dirs_exist_ok=True)
+        shutil.copytree(os.path.join(KIT, ".claude", "skills", name),
+                        os.path.join(KIT, ".agents", "skills", name), dirs_exist_ok=True)
     print(f"ok    {len(PORTABLE_SKILLS)} skills copied to .agents/skills/")
 
 
 def run(argv):
     print("run   " + " ".join(argv), flush=True)
-    return subprocess.run(argv, cwd=SP).returncode == 0
+    return subprocess.run(argv, cwd=KIT).returncode == 0
 
 
 def clone_refs():
     refs = os.path.join(SP, "refs")
-    for line in open(os.path.join(refs, "VERIFIED.txt"), encoding="utf-8"):
+    for line in open(os.path.join(KIT, "refs", "VERIFIED.txt"), encoding="utf-8"):
         parts = line.split()
         if not parts or parts[0].startswith("#") or len(parts) < 2:
             continue
@@ -113,7 +116,23 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--refs", action="store_true", help="clone and index the reference decomps")
     ap.add_argument("--slow", action="store_true", help="run regress.py --slow")
+    ap.add_argument("--state", help="state directory to record in state.path")
     args = ap.parse_args()
+    global SP
+    if args.state:
+        with open(os.path.join(KIT, "state.path"), "w", encoding="utf-8") as fh:
+            fh.write(os.path.abspath(args.state).replace("\\", "/") + "\n")
+        importlib.reload(kitpaths)
+        SP = kitpaths.SP
+    try:
+        inside = os.path.commonpath([os.path.abspath(SP), os.path.abspath(KIT)]) == os.path.abspath(KIT)
+    except ValueError:
+        inside = False
+    if inside:
+        print(f"FAIL  state directory {SP} is inside the checkout {KIT}; git could delete it. "
+              "Pick one outside with --state")
+        sys.exit(1)
+    print(f"ok    state directory {SP}")
     ok = check_python()
     make_state()
     mirror_skills()

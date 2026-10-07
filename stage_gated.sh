@@ -14,14 +14,15 @@
 # Secure-area addresses (< 0x02000800) are staged too -- land_harvest.sh parks them back out and
 # feeds them one per wave, because their layout drift is cumulative.
 set -u
-SP="$(cd "$(dirname "$0")" && pwd)"
+KIT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && { pwd -W 2>/dev/null || pwd; })"
+SP="$(python "$KIT/kitpaths.py" state)"
 APPLY=0
 [ "${1:-}" = "--apply" ] && APPLY=1
 # resumable.py owns "is this already committed": it answers from the delink ranges, not from a
 # symbol name, so a renamed matched function still reads as committed. Scan ONCE -- calling it per
 # file would re-walk ~35k pool files 800 times.
 Q=$(mktemp); trap 'rm -f "$Q"' EXIT
-python "$SP/resumable.py" --all 2>/dev/null | awk '{print $2}' | sort -u > "$Q"
+python "$KIT/resumable.py" --all 2>/dev/null | awk '{print $2}' | sort -u > "$Q"
 
 n=0; skip=0
 for f in "$SP"/gated/*/*.cpp; do

@@ -9,8 +9,9 @@
 # integrator gathers from. Measured 08-20: five HIT copies from the 08-19 sweep still gated MATCH a
 # day later while their addresses sat in the resume queue as unmatched work to pay a worker for.
 set -u
-SP="$(cd "$(dirname "$0")" && pwd)"
-REPO="${DQIX_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && { pwd -W 2>/dev/null || pwd; })/dqix-decomp}"
+KIT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && { pwd -W 2>/dev/null || pwd; })"
+SP="$(python "$KIT/kitpaths.py" state)"
+REPO="$(python "$(cd "$(dirname "${BASH_SOURCE[0]}")" && { pwd -W 2>/dev/null || pwd; })/kitpaths.py" repo)"
 STAGE_IT=0
 [ "${1:-}" = "--stage" ] && STAGE_IT=1
 LOG="$SP/wlog/harvest_repairwork.log"
@@ -30,10 +31,10 @@ for b in $HITS; do
   [ -e "$f" ] || continue
   MOD="${b%%_*}"; ADDR="${b##*_}"
   # Already committed work re-gates as a duplicate, not a win.
-  if [ -z "$(python "$SP/resumable.py" "$ADDR" 2>/dev/null)" ]; then
+  if [ -z "$(python "$KIT/resumable.py" "$ADDR" 2>/dev/null)" ]; then
     skipped=$((skipped + 1)); continue
   fi
-  v=$(python "$SP/wgate.py" "$MOD" "$ADDR" "$f" 2>&1 | head -1)
+  v=$(python "$KIT/wgate.py" "$MOD" "$ADDR" "$f" 2>&1 | head -1)
   case "$v" in
     MATCH*)
       match=$((match + 1))

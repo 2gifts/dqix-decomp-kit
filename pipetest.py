@@ -30,14 +30,15 @@ import subprocess
 import sys
 import tempfile
 
-SP = os.path.dirname(os.path.abspath(__file__))
+SP = _kp.SP
+KIT = _kp.KIT
 REPO = _kp.REPO
 SRC = f"{REPO}/src/Combat/Main"
 
 
 def gate(addr, path):
     """Last line of wgate for one candidate."""
-    r = subprocess.run([sys.executable, f"{SP}/wgate.py", "main", addr, path],
+    r = subprocess.run([sys.executable, f"{KIT}/wgate.py", "main", addr, path],
                        env={**os.environ, "WGATE_ALLOW_COMMITTED": "1"},
                        capture_output=True, text=True, cwd=REPO)
     out = (r.stdout or r.stderr).strip().splitlines()

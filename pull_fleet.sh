@@ -11,7 +11,8 @@
 # stays with finish_wave, which owns the wave lock, the drift culling and the push. Run this INSTEAD
 # of run_module for a module, never alongside it -- both would claim from the same pool and pay for
 # the same functions twice.
-SP="$(cd "$(dirname "${BASH_SOURCE[0]}")" && { pwd -W 2>/dev/null || pwd; })"
+KIT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && { pwd -W 2>/dev/null || pwd; })"
+SP="$(python "$KIT/kitpaths.py" state)"
 MOD="${1:-main}"
 TOTAL="${2:-20}"
 SLOTS="${3:-4}"
@@ -23,7 +24,7 @@ echo "$(date '+%m-%d %H:%M') pull_fleet $MOD: \$$TOTAL across $SLOTS slots (\$$P
 
 pids=()
 for ((s=1; s<=SLOTS; s++)); do
-  bash "$SP/pull_worker.sh" "$MOD" "$s" "$PER" &
+  bash "$KIT/pull_worker.sh" "$MOD" "$s" "$PER" &
   pids+=($!)
 done
 wait "${pids[@]}"

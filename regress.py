@@ -23,8 +23,9 @@ import sys
 import tempfile
 import time
 
-SP = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, SP)
+SP = _kp.SP
+KIT = _kp.KIT
+sys.path.insert(0, KIT)
 
 FAILED = []
 PASSED = [0]
@@ -48,7 +49,7 @@ def check(name, fault):
 
 
 def load(mod):
-    spec = importlib.util.spec_from_file_location("_r_" + mod, f"{SP}/{mod}.py")
+    spec = importlib.util.spec_from_file_location("_r_" + mod, f"{KIT}/{mod}.py")
     m = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(m)
     return m
@@ -115,8 +116,8 @@ def _gated_pool():
        "full-cap grind', and three of four workers quoted it back instead of trying anything")
 def _ruled_out():
     M = load("mkresume")
-    if SP not in sys.path:
-        sys.path.insert(0, SP)
+    if KIT not in sys.path:
+        sys.path.insert(0, KIT)
     import resumable
     real = resumable.skips
     resumable.skips = lambda: {"021e6448": (None, "SKIP REGPERM 142 | declaration order inert")}
@@ -167,7 +168,7 @@ def _verdicts():
        "wrong side of the valley and reported 'inert'")
 def _score_ranking():
     C = load("colorsweep")
-    src = open(f"{SP}/colorsweep.py", encoding="utf-8").read()
+    src = open(f"{KIT}/colorsweep.py", encoding="utf-8").read()
     if "mnem * mnem_w" not in src or "mnem_w = slot + 1" not in src or "over_w = mnem_w * (slot // 4 + 2)" not in src:
         return "score() no longer weights size above mnemonics above bytes"
     if not re.search(r"\\s\*\\\*\\s\*0x|\*\\s\*0x", src):
@@ -331,7 +332,7 @@ def _r22():
        "749 never once attempted, unreachable. A scheduler that drops work reports success")
 def _stratify_total():
     C = load("claim")
-    src = open(os.path.join(SP, "claim.py"), encoding="utf-8").read()
+    src = open(os.path.join(KIT, "claim.py"), encoding="utf-8").read()
     if "not any(lo <= r[1] <= hi for lo, hi in SIZE_BOUNDS)" not in src:
         return "stratify() no longer keeps items that fall outside every SIZE_BOUNDS range"
     # and the live pool must not be empty for a band the config still has work in
@@ -352,7 +353,7 @@ def _failscore():
     worst = 2600 * 10000 + 999 + 1000          # every instruction wrong, oversize, on the biggest
     if C.FAILSCORE <= worst:                   # function in the ROM
         return "FAILSCORE %d is reachable by a real score (worst plausible %d)" % (C.FAILSCORE, worst)
-    src = open(os.path.join(SP, "colorsweep.py"), encoding="utf-8").read()
+    src = open(os.path.join(KIT, "colorsweep.py"), encoding="utf-8").read()
     if "10 ** 6" in src:
         return "a bare 10**6 sentinel is still in colorsweep.py"
     if src.count("FAILSCORE") < 5:
@@ -427,7 +428,7 @@ def _r16_blocks():
        "silently spends the whole sweep budget. pad/ruleprobe.cpp carries one instance of each")
 def _new_rules():
     C = load("colorsweep")
-    probe = os.path.join(SP, "pad", "ruleprobe.cpp")
+    probe = os.path.join(KIT, "pad", "ruleprobe.cpp")
     if not os.path.exists(probe):
         return "pad/ruleprobe.cpp is missing -- the rules have no shape to be tested against"
     text = open(probe, encoding="utf-8").read()
@@ -935,17 +936,17 @@ def _levercheck_boards():
     env = {**os.environ, "LEVERCHECK_TSV": os.path.join(d, "none.tsv"), "LEVERCHECK_DOCS": doc,
            "LEVERCHECK_DECLINED": os.path.join(d, "none.txt"), "LEVERCHECK_BOARDS": boards,
            "LEVERCHECK_CFG": cfg, "LEVERWATCH_SEEN": os.path.join(d, "seen.txt")}
-    r = subprocess.run([sys.executable, f"{SP}/levercheck.py", "--keys"], capture_output=True, text=True, env=env)
+    r = subprocess.run([sys.executable, f"{KIT}/levercheck.py", "--keys"], capture_output=True, text=True, env=env)
     keys = [ln.split()[0] for ln in r.stdout.splitlines() if ln.strip()]
     if keys != ["02011111"] or r.returncode != 1:
         return "levercheck --keys gave %s (exit %d); expected only the landed uncited 02011111" % (keys, r.returncode)
     bash = shutil.which("bash") or "bash"
-    first = subprocess.run([bash, f"{SP}/leverwatch.sh", "--once", "1"], capture_output=True, text=True,
+    first = subprocess.run([bash, f"{KIT}/leverwatch.sh", "--once", "1"], capture_output=True, text=True,
                            env=env, timeout=60)
     if first.returncode != 0 or first.stdout.count("LEVER NEEDS PROMOTING") != 1 or "02011111" not in first.stdout:
         return "leverwatch --once did not fire exactly once on 02011111: %r" % first.stdout[:200]
     try:
-        again = subprocess.run([bash, f"{SP}/leverwatch.sh", "--once", "1"], capture_output=True, text=True,
+        again = subprocess.run([bash, f"{KIT}/leverwatch.sh", "--once", "1"], capture_output=True, text=True,
                                env=env, timeout=5)
         return "leverwatch --once exited on an already-announced lever: %r" % again.stdout[:200]
     except subprocess.TimeoutExpired as e:
@@ -1144,7 +1145,7 @@ def _loop_shape_class():
        "candidates deferred as wired-0 on every wave forever, silently. Six were hand asm (never to "
        "be landed) and one was real C that no naming rule covered")
 def _placement():
-    src = open(f"{SP}/ov_recover.py", encoding="utf-8").read()
+    src = open(f"{KIT}/ov_recover.py", encoding="utf-8").read()
     m = re.search(r"ASMPAT = re\.compile\(r'(\(\?m\)\^\\s\*asm\\b[^']*)'", src)
     if not m:
         return "the asm-detection pattern is gone from place()"
@@ -1160,7 +1161,7 @@ def _placement():
     for token in ("PLACE-SKIP-ASM", "PLACE-FALLBACK", "PLACE-ASM-ALLOW"):
         if token not in src:
             return "place() no longer reports %s" % token
-    allow = open(f"{SP}/asm_allow.txt", encoding="utf-8").read()
+    allow = open(f"{KIT}/asm_allow.txt", encoding="utf-8").read()
     addrs = [l.split('#', 1)[0].split()[0] for l in allow.splitlines() if l.split('#', 1)[0].strip()]
     if not all(re.fullmatch(r"0[0-9a-f]{7}", a) for a in addrs):
         return "asm_allow.txt holds something that is not a bare address, so the gate is not narrow"
@@ -1177,7 +1178,7 @@ def _placement():
        "the all-or-nothing revert then threw that fix away along with a bad callee rename")
 def _linkage_repairs():
     import autorepair
-    src = open(f"{SP}/autorepair.py", encoding="utf-8").read()
+    src = open(f"{KIT}/autorepair.py", encoding="utf-8").read()
     if "_no_rename" not in src:
         return "the two-stage retry is gone: one bad rename again discards every other repair"
     if 'dropped extern "C"' not in src:
@@ -1206,7 +1207,7 @@ def _linkage_repairs():
        "'OK : +0 delinked, green, no-new-commits' -- a harvest that never ran looked like a "
        "harvest with no hits")
 def _module_arg():
-    src = open(f"{SP}/finish_wave.sh", encoding="utf-8").read()
+    src = open(f"{KIT}/finish_wave.sh", encoding="utf-8").read()
     if "FATAL: module must be" not in src:
         return "no module validation present"
     if not re.search(r"main\|\[0-9\]\[0-9\]\[0-9\]\)", src):
@@ -1221,7 +1222,7 @@ def _module_arg():
        "while the log said MATCH")
 def _staging_sweep_keeps_match():
     import subprocess
-    src = open(f"{SP}/pull_worker.sh", encoding="utf-8").read()
+    src = open(f"{KIT}/pull_worker.sh", encoding="utf-8").read()
     start = src.find('  mkdir -p "$SP/attempts"\n  _fb=')
     end = src.find('non-final file(s) out of staging" >> "$LOG"', start)
     if start < 0 or end < 0:
@@ -1358,9 +1359,9 @@ def _rela_addend():
     found = [dataown.addend(rr, text) for rr in rel.iter_relocations() if rr["r_info_type"] == 2]
     if found != [5]:
         return "addends read %s, want [5]" % found
-    if "dataown.addend(rr, mine)" not in open(f"{SP}/integrate.py", encoding="utf-8").read():
+    if "dataown.addend(rr, mine)" not in open(f"{KIT}/integrate.py", encoding="utf-8").read():
         return "integrate.py no longer reads the addend through dataown.addend"
-    if "rr['r_addend'] if rr.is_RELA()" not in open(f"{SP}/wgate.py", encoding="utf-8").read():
+    if "rr['r_addend'] if rr.is_RELA()" not in open(f"{KIT}/wgate.py", encoding="utf-8").read():
         return "wgate.py no longer reads r_addend for a RELA pool word"
     return None
 
@@ -1448,7 +1449,7 @@ def run_functional():
     import tempfile
     bad = 0
     for module, addr, prior, expected, budget, what in FUNCTIONAL:
-        src = os.path.join(SP, prior)
+        src = os.path.join(KIT, prior)
         if not os.path.exists(src):
             print("FAIL  %s: prior %s is gone -- the base a crack depends on must not be deleted"
                   % (addr, prior))
@@ -1472,7 +1473,7 @@ def run_functional():
         # Every prior here IS a committed address -- that is what makes the crack checkable -- and
         # wgate reports ALREADY-COMMITTED instead of MATCH on some of them, which colorsweep scores
         # as a compile failure and the case reads as "the crack was lost".
-        r = subprocess.run([sys.executable, os.path.join(SP, "colorsweep.py"), module, addr, work,
+        r = subprocess.run([sys.executable, os.path.join(KIT, "colorsweep.py"), module, addr, work,
                             "--depth", "3", "--budget", str(budget)],
                            capture_output=True, text=True, cwd=_kp.REPO,
                            env={**os.environ, "WGATE_ALLOW_COMMITTED": "1"})
@@ -1495,7 +1496,7 @@ def sweep_fingerprint():
     h = hashlib.md5()
     for p in ("colorsweep.py", "wdiff.py", "wgate.py"):
         try:
-            h.update(open(f"{SP}/{p}", "rb").read())
+            h.update(open(f"{KIT}/{p}", "rb").read())
         except OSError:
             h.update(b"missing")
     h.update(repr(FUNCTIONAL).encode())

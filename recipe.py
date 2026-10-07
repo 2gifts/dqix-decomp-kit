@@ -7,12 +7,16 @@
 Exists so a worker can pay for the recipe it needs instead of the 21k tokens of recipes it does
 not. Matching is by heading prefix, case-insensitive, so the index entry can be typed loosely.
 """
+import os as _kpos, sys as _kpsys
+_kpsys.path.insert(0, _kpos.path.dirname(_kpos.path.abspath(__file__)))
+import kitpaths as _kp
 import io
 import os
 import re
 import sys
 
-SP = os.path.dirname(os.path.abspath(__file__))
+SP = _kp.SP
+KIT = _kp.KIT
 
 
 def sections(path):

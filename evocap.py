@@ -7,7 +7,8 @@ import os
 import re
 import sys
 
-SP = os.path.dirname(os.path.abspath(__file__))
+SP = _kp.SP
+KIT = _kp.KIT
 PROJECTS = _kp.CLAUDE_PROJECTS
 PRICE = {"claude-opus": 5e-6, "claude-sonnet": 3e-6, "claude-haiku": 1e-6}
 

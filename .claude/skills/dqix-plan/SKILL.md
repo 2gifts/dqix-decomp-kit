@@ -23,10 +23,12 @@ and it is easy to garble:
   shape whenever a source exists.
 
 So: put authorised spend on a worker, and let the worker's verdicts choose what you crack. A main
-thread with no worker feeding it has nothing to react to. `python $SP/poolsize.py <mod>` sizes each
+thread with no worker feeding it has nothing to react to. `python $KIT/poolsize.py <mod>` sizes each
 module's unmatched pool.
 
-    SP    the kit root: $DQIX_SP when set, else this session's working directory
+    KIT   the kit checkout (scripts, docs, skills): $DQIX_KIT when set, else this session's
+          working directory
+    SP    the state directory (attempts, logs, claims, staging): `python $KIT/kitpaths.py state`
     REPO  $DQIX_REPO, or ../dqix-decomp
 
 ## The job, in the user's words
@@ -47,7 +49,7 @@ module's unmatched pool.
    funded like a 260B one, and since 2026-08-26 each band has its own OPEN flag as well:
    `PULL_SMALL PULL_MED PULL_LMINUS PULL_L PULL_LPLUS PULL_XL PULL_MASSIVE`, `1` or `0`, read as
    files on every claim. `STATE.md` prints them on a `bands open:` line, and
-   `python $SP/claim.py <mod> --peek 8` shows what the next claims would be without spending one.
+   `python $KIT/claim.py <mod> --peek 8` shows what the next claims would be without spending one.
 2. **The main thread cracks and automates whatever idiom is blocking.** When a function stalls on a
    recognisable residue, close it by hand, then generalise it the same session (Phase 3). A crack
    that stays in the conversation is worth one function; the same crack as a `colorsweep` rule is
@@ -76,14 +78,14 @@ change takes effect on the next function with no relaunch.
 The next functions are in `OPEN_WORK.md` and `wlog/evolve_queue.txt`. Strip any pragma first and
 work the pragma-free source. Route a worker miss by its residue:
 
-* REGPERM: `CF_PAIRS=1 python $SP/frida/colorforce.py <src> ov<NNN>|main <addr> <size> [pool-off]`
+* REGPERM: `CF_PAIRS=1 python $KIT/frida/colorforce.py <src> ov<NNN>|main <addr> <size> [pool-off]`
   first (CPU only; pairs and groups catch rotations single flips miss, `CF_BASE` chains). Then map
   the decision to a declaration position with `pad/renum/renum.py` (core.md "A CALLEE-SAVED ROTATION").
-  SCHED or order swaps: `python $SP/frida/schedforce.py` with the same arguments. Chain them: the
+  SCHED or order swaps: `python $KIT/frida/schedforce.py` with the same arguments. Chain them: the
   scheduler's leftovers are often register/slot swaps. A flip names the decision; turn it into
   source, put the reading on the evolve board, then `/dqix-evolve`.
 * anything else: `/dqix-evolve`.
-* an UNMATCHED attempt is suspect: `python $SP/plausible.py <file>` flags volatile locals, dead
+* an UNMATCHED attempt is suspect: `python $KIT/plausible.py <file>` flags volatile locals, dead
   address-taking pointers, self-assignments and invented inline-wrapper chains. Evolve's scorer
   penalises them; research briefs start from the cleaned form. A MATCH is never blocked for them.
 * an evolve PLATEAU goes to a COMPILER-RESEARCH agent at once, never back into the evolve queue:
@@ -101,7 +103,7 @@ you are debugging that script.
 
 ## Update the kit first
 
-    python $SP/kit_update.py
+    python $KIT/kit_update.py
 
 Before anything else, every time this plan starts or resumes. Exit 0: re-read every `RE-READ` file it
 prints (this skill included), then go on. Any other exit: tell the user the line it printed; on 2 or 3
@@ -111,7 +113,7 @@ do not start or resume paid work until they answer.
 
     $SP/STATE.md        GENERATED. Fleet counts, coverage in BYTES and functions, remaining work per
                         size band, HEAD, staged-but-uncommitted, selfcheck/regress, last 12 verdicts.
-                        `pull_all.sh` refreshes it every 120s; `python $SP/progress.py` rewrites it
+                        `pull_all.sh` refreshes it every 120s; `python $KIT/progress.py` rewrites it
                         on demand. Never hand-edit it and never quote a number from memory.
 
     $SP/OPEN_WORK.md    HAND-WRITTEN. Cracked idioms and how they were cracked, open residues with
@@ -134,21 +136,21 @@ Pick ONE address, take it to a gate verdict, land it or record why, move on. Rot
 one overlay starves; within a module take the large bands first, because that is where the
 remaining coverage is and because a large function is the project's best bug finder.
 
-    python $SP/cov.py                          coverage, the authoritative number
-    python $SP/claim.py <mod> --status         what is already claimed; release stale ones
-    python $SP/claim.py <mod>                  the next address to work
+    python $KIT/cov.py                          coverage, the authoritative number
+    python $KIT/claim.py <mod> --status         what is already claimed; release stale ones
+    python $KIT/claim.py <mod>                  the next address to work
 
 Working one address:
 
-    python $SP/wlist.py <mod> <addr>           the FULL listing, never truncated
-    python $SP/scaffold.py <mod> <addr>        a starting file with callees resolved
-    python $SP/wgate.py <mod> <addr> <src>     THE verdict -- MATCH, BYTEDIFF, SIZE, WRONG-SYMBOL
-    python $SP/wdiff.py <mod> <addr> <src>     the decoded diff of only the diverging instructions
+    python $KIT/wlist.py <mod> <addr>           the FULL listing, never truncated
+    python $KIT/scaffold.py <mod> <addr>        a starting file with callees resolved
+    python $KIT/wgate.py <mod> <addr> <src>     THE verdict -- MATCH, BYTEDIFF, SIZE, WRONG-SYMBOL
+    python $KIT/wdiff.py <mod> <addr> <src>     the decoded diff of only the diverging instructions
 
 `wgate` honours `MWCC=<ver>/<sub>` and `WGATE_FLAGS`. A function that matches only under another
 build or flag set means our source carries something the ROM's C never had: use the override to
 locate the difference, then fix the source — never land a function behind an override. Land a
-MATCH through `staging/<mod>/` and `bash $SP/integrate_fast.sh` — never by hand-editing
+MATCH through `staging/<mod>/` and `bash $KIT/integrate_fast.sh` — never by hand-editing
 `delinks.txt`.
 
 **Stop conditions for one address.** Land it, or write the residue down and take the next one. Do
@@ -170,17 +172,17 @@ apply to every function:
 
 ### The tools that came out of it, which apply to every function
 
-    python $SP/pad/casegrid.py <src> <case> <from.txt> <to-dir>   sweep one region's C, per-variant
-    python $SP/pad/findshape.py [--twonode]                       find COMMITTED sources whose ROM
-    python $SP/pad/findladder.py                                  code already has a shape you cannot
-    python $SP/pad/shapecat.py e4|e7                              produce -- their C is the answer
-    python $SP/pad/probe_cc.py <probe.cpp> --bytes                compile+disassemble a 10-line probe
-    python $SP/pad/bytemap.py <src>                               attribute a BYTEDIFF per region
-    python $SP/pad/romdis.py <addr> [n]                           disassemble unsplit code
-    python $SP/pad/caseresidue.py [src] [--all]                   WHICH case bodies differ and on
+    python $KIT/pad/casegrid.py <src> <case> <from.txt> <to-dir>   sweep one region's C, per-variant
+    python $KIT/pad/findshape.py [--twonode]                       find COMMITTED sources whose ROM
+    python $KIT/pad/findladder.py                                  code already has a shape you cannot
+    python $KIT/pad/shapecat.py e4|e7                              produce -- their C is the answer
+    python $KIT/pad/probe_cc.py <probe.cpp> --bytes                compile+disassemble a 10-line probe
+    python $KIT/pad/bytemap.py <src>                               attribute a BYTEDIFF per region
+    python $KIT/pad/romdis.py <addr> [n]                           disassemble unsplit code
+    python $KIT/pad/caseresidue.py [src] [--all]                   WHICH case bodies differ and on
                                                                   which instruction pairs -- turns
                                                                   "27 bytes somewhere" into 2 cases
-    python $SP/pad/framemap.py <mod> <addr> <src>                 stack slots ROM vs ours, for ANY
+    python $KIT/pad/framemap.py <mod> <addr> <src>                 stack slots ROM vs ours, for ANY
                                                                   address: both frame sizes, every
                                                                   sp+N, and the first rank that
                                                                   diverges (= the wrong-sized object)
@@ -202,9 +204,9 @@ real function with `casegrid`.
 
 Zero model tokens. Launch them and leave them; they stage what closes and the wave lands it.
 
-    for i in 1 2 3 4; do REPAIR_SHARD="$i/4" python -u $SP/repairsweep.py > $SP/wlog/repairsweep_s$i.log 2>&1 & done
-    python -u $SP/poolsweep.py --apply > $SP/wlog/poolsweep.log 2>&1 &
-    python -u $SP/skipsweep.py --interval 90 > $SP/wlog/skipsweep.log 2>&1 &
+    for i in 1 2 3 4; do REPAIR_SHARD="$i/4" python -u $KIT/repairsweep.py > $SP/wlog/repairsweep_s$i.log 2>&1 & done
+    python -u $KIT/poolsweep.py --apply > $SP/wlog/poolsweep.log 2>&1 &
+    python -u $KIT/skipsweep.py --interval 90 > $SP/wlog/skipsweep.log 2>&1 &
 
 `repairsweep` re-gates the parked pools and now writes `$SP/wlog/repair_verdicts*.txt` — the
 per-address residues, which are the input to the next rule. `poolsweep` gates the `.cpp` left in
@@ -223,7 +225,7 @@ it just pays on the functions a worker is working now instead of on the backlog.
 
 Land what they stage with ONE build:
 
-    bash $SP/integrate_fast.sh      # per-module finish_wave is its fallback on red
+    bash $KIT/integrate_fast.sh      # per-module finish_wave is its fallback on red
 
 ## Phase 3 — turn each crack into an automatic rule
 
@@ -235,7 +237,7 @@ same diff offsets appear on two addresses. Close it by hand (`/dqix-hand-match <
 
 1. a `colorsweep.py` rewrite — keep `r17_decl_permute` LAST, it is the widest rule;
 2. a `core.md` correction if the doc told workers something false;
-3. a `FUNCTIONAL` entry in `$SP/regress.py`, then `python $SP/regress.py --slow`.
+3. a `FUNCTIONAL` entry in `$KIT/regress.py`, then `python $KIT/regress.py --slow`.
 
 If the prior file for a `FUNCTIONAL` case is missing, **rebuild it by inverting the documented crack
 on the committed match** — that is how all three were restored on 2026-08-25, and each reproduced its
@@ -258,13 +260,13 @@ holding the loop instead of the main thread, and it needs the user's word before
     echo 0     > $SP/PULL_MASSIVE    # 4097+ closed -- see "the XL band" below
     : > $SP/MODEL_LARGE              # empty = sonnet, which is the standing choice
     rm -f $SP/MODEL_LARGE_LEFT $SP/STOP_PULL $SP/FLEET_STOPPED
-    bash $SP/pull_all.sh             # background, NEVER foreground
+    bash $KIT/pull_all.sh             # background, NEVER foreground
 
 Then arm two monitors and one background watcher, so the work wakes you instead of you polling:
 
     Monitor:          tail -n0 -F $SP/wlog/pull_*_s*.log | grep -E --line-buffered " (MATCH|miss|SKIP|recycle|WARN) "
-    Monitor:          bash $SP/health.sh
-    Background Bash:  bash $SP/leverwatch.sh --once     (re-arm after it fires; never under Monitor)
+    Monitor:          bash $KIT/health.sh
+    Background Bash:  bash $KIT/leverwatch.sh --once     (re-arm after it fires; never under Monitor)
 
 The verdict monitor says what happened, the health monitor says when nothing is happening, and
 `leverwatch` says when a worker's lever or a landed evolve crack has not reached `core.md` yet.
@@ -351,7 +353,7 @@ the residue, the worker meanwhile starts the next function. You are never idle w
 
 1. Read the verdict — `$SP/wlog/pull_*_s*_*.json`, `result` field. One line to the user: addr,
    verdict, cost.
-2. `python $SP/blockercheck.py` is the queue, not the verdict prose. It ranks the MEASURED residue
+2. `python $KIT/blockercheck.py` is the queue, not the verdict prose. It ranks the MEASURED residue
    classes (`wlog/blockers.tsv`, written by `blocker.py` re-gating the preserved attempt) by pending
    count and bytes. **Work the top class, not the last function you read about.** A class counts as
    addressed once `core.md` cites the address of one member, so cracking one member frees the whole
@@ -363,10 +365,10 @@ the residue, the worker meanwhile starts the next function. You are never idle w
    `regress.py --slow`. A crack that stays in the conversation is worth one function; the same crack
    as a rule is worth every future occurrence, free. `pad/rulecheck.py` shows what a new rule
    proposes before a sweep spends its budget on it.
-4. `python $SP/toolgripes.py` mines the verdicts for TOOL complaints. Fix the tool, then continue —
+4. `python $KIT/toolgripes.py` mines the verdicts for TOOL complaints. Fix the tool, then continue —
    a 10KB function produced five tier-wide defects in one evening.
 
-Keep an alerting Monitor on `$SP/health.sh` for as long as a worker lives. **Stop and ask the user
+Keep an alerting Monitor on `$KIT/health.sh` for as long as a worker lives. **Stop and ask the user
 if:** 10 consecutive misses, or cost per match exceeds $5 sustained. A usage limit is handled by the
 pipeline, not by waiting — `pull_all` harvests the lockout free, lands it, and stops; a fresh session
 resumes with `/dqix-continue`. At a WEEKLY limit, kill every worker; never spawn into a lockout.
@@ -376,7 +378,7 @@ resumes with `/dqix-continue`. At a WEEKLY limit, kill every worker; never spawn
 `PULL_XL=1 / PULL_MASSIVE=0` is the standing setting (`claim.py` defaults both closed: `echo 1 > $SP/PULL_XL` opens it). **Judge a band by `$/matched-BYTE`, never
 `$/match`** — coverage is ~80% by function against ~38% by byte, so `$/match` flatters small
 functions by an order of magnitude and is the metric that produced the old "close the tail" advice.
-`python $SP/bandcost.py` prints both from the worker logs. Measured 2026-08-26:
+`python $KIT/bandcost.py` prints both from the worker logs. Measured 2026-08-26:
 
     band             tried  matched     spend     $/match  $/matched-byte
     med 65-256           8        3     14.71       $4.90       $0.01916
@@ -422,13 +424,13 @@ default.
    self-matching poll never exits — a `pull_worker` pattern counted 6 processes, all of them itself.
    The same trap makes `ps`-style verification lie: `fullstop.sh` reported "none running" while two
    `health.sh` monitors and eight orphaned `tail`/`grep` watchers were alive.
-5. **`python $SP/selfcheck.py` and `python $SP/regress.py` after ANY script edit**, and
+5. **`python $KIT/selfcheck.py` and `python $KIT/regress.py` after ANY script edit**, and
    `regress.py --slow` after touching `colorsweep.py`/`wdiff.py`/`wgate.py`. `pipetest.py` after
    touching the gate — it is the only test that can fail honestly, because it runs known-good and
    known-broken inputs through the real gate.
 6. **A repair is not a repair until the gate agrees.** `autorepair` verified only its own exported
    symbol and silently broke callees.
-7. **No hand asm** except the addresses in `$SP/asm_allow.txt`. Workers SKIP instead; the integrator
+7. **No hand asm** except the addresses in `$KIT/asm_allow.txt`. Workers SKIP instead; the integrator
    parks anything else in `asm_park_<module>/`.
 8. **Never edit a shell script while a run of it is in flight.** bash re-reads by offset. Edit a copy
    and `mv` it over the original.
@@ -445,8 +447,7 @@ default.
     `pull_all.sh` and REFUSES while `STOP_PULL` or `FLEET_STOPPED` exists, so it can no longer undo a
     `/dqix-stop`. `killfleet.sh --all` — the escalation `/dqix-stop` falls back to — killed only
     `run_all`/`run_overlay`/`run_main` and never `pull_all`/`pull_worker`, so it reported success
-    with the fleet still spending. `verify_fixes.sh` was checking for `watchdog.sh`, which no longer
-    exists, so two of its checks could never pass; it checks `health.sh` now.
+    with the fleet still spending.
 
 ## If this session dies or gets long
 

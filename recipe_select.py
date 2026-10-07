@@ -25,9 +25,10 @@ import re
 import subprocess
 import sys
 
-SP = os.path.dirname(os.path.abspath(__file__))
+SP = _kp.SP
+KIT = _kp.KIT
 REPO = _kp.REPO
-DOC = f"{SP}/worker_src/core.md"
+DOC = f"{KIT}/worker_src/core.md"
 CACHE = f"{SP}/doc_cache"
 HANDOFF_MARK = "## HANDOFF FROM THE PREVIOUS SESSION ON THIS ADDRESS"
 # An explicit end sentinel, NOT "up to the next `## `": a session's recon carries its own headings,
@@ -79,7 +80,7 @@ def sections(text):
 
 def listing(mod, addr):
     try:
-        r = subprocess.run([sys.executable, f"{SP}/wlist.py", mod, addr],
+        r = subprocess.run([sys.executable, f"{KIT}/wlist.py", mod, addr],
                            cwd=REPO, capture_output=True, text=True, timeout=300)
         return r.stdout or ""
     except Exception:
@@ -114,7 +115,7 @@ def show(term):
 
 
 ATTEMPT_CAP = int(os.environ.get("ATTEMPT_CAP", "6000"))
-DEADENDS = f"{SP}/worker_src/deadends.md"
+DEADENDS = f"{KIT}/worker_src/deadends.md"
 
 
 def dead_ends(addr):
@@ -146,7 +147,7 @@ def prior_attempts(mod, addr, best_path):
     contrast that makes a second look cheap.
     """
     try:
-        sys.path.insert(0, SP)
+        sys.path.insert(0, KIT)
         import nearmiss
     except Exception:
         return []
@@ -347,7 +348,7 @@ def main():
             # that cannot resolve -- 33 of 113 kept artifacts do. ov015:0218ee38 had two, and they
             # only appeared once its codegen was byte-exact, costing two extra rounds.
             try:
-                sys.path.insert(0, f"{SP}/pad")
+                sys.path.insert(0, f"{KIT}/pad")
                 import symaudit
                 _faults = symaudit.audit(_best)
             except Exception:
@@ -387,7 +388,7 @@ def main():
                      "This doc was filtered to the instruction shapes in THIS function's listing.\n"
                      "THE FILTER IS A HEURISTIC AND IT CAN BE WRONG. If your diff resembles one of\n"
                      "the titles below, read it — one command, no model tokens:\n\n"
-                     f"    python {SP}/recipe_select.py --show \"<part of the title>\"\n\n"
+                     f"    python {KIT}/recipe_select.py --show \"<part of the title>\"\n\n"
                      "Not included here (most likely first):\n")
             for t, _b, s in sorted(dropped, key=lambda x: -x[2]):
                 fh.write(f"  - {t.lstrip('# ').rstrip()}\n")

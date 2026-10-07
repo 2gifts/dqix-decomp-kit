@@ -19,7 +19,8 @@ from elftools.elf.elffile import ELFFile
 import buildcfg
 
 REPO = _kp.REPO
-SP = os.path.dirname(os.path.abspath(__file__)).replace(chr(92), "/")
+SP = _kp.SP
+KIT = _kp.KIT
 CC = buildcfg.CC
 
 # Per-file compiler override (tools/cc_overrides.txt, same table the build reads).

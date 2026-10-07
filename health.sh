@@ -7,8 +7,9 @@
 # backed off 120s and spawned another pair of large-tier workers on the same 6 residue functions.
 # Two hours and several worker-hours of tokens, zero output, and the only alert was a 120-minute
 # "no commit" that fired after the damage. Every check below is sized to catch that in minutes.
-SP="$(cd "$(dirname "${BASH_SOURCE[0]}")" && { pwd -W 2>/dev/null || pwd; })"
-REPO="${DQIX_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && { pwd -W 2>/dev/null || pwd; })/dqix-decomp}"
+KIT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && { pwd -W 2>/dev/null || pwd; })"
+SP="$(python "$KIT/kitpaths.py" state)"
+REPO="$(python "$KIT/kitpaths.py" repo)"
 PROG="$SP/PROGRESS.log"
 STATE="$SP/wlog/health_state.txt"
 INTERVAL=${HEALTH_INTERVAL:-120}       # check every 2 min
@@ -32,7 +33,7 @@ mins_since() { echo $(( ( $(now) - $1 ) / 60 )); }
 # which is only written while the fleet runs -- so with the fleet stopped the monitor kept printing
 # a frozen 11622 for hours after commits had moved the real figure to 11654. A status line that
 # cannot change reads as proof that nothing is happening, which is the opposite of monitoring.
-cov_now() { python "$SP/cov.py" 2>/dev/null || echo "(cov unavailable)"; }
+cov_now() { python "$KIT/cov.py" 2>/dev/null || echo "(cov unavailable)"; }
 commit_age_min() {
   local t; t=$(git -C "$REPO" log -1 --format=%ct 2>/dev/null)
   [ -z "$t" ] && { echo 0; return; }
@@ -135,7 +136,7 @@ while true; do
   _crackf="$SP/wlog/.last_crack_alert"
   _cage=$(( $(now) - $(date -r "$_crackf" +%s 2>/dev/null || echo 0) ))
   if [ "$_cage" -ge "${CRACK_ALERT_EVERY:-21600}" ]; then
-    _crack=$(python "$SP/blockercheck.py" 2>/dev/null | grep '^CRACK:')
+    _crack=$(python "$KIT/blockercheck.py" 2>/dev/null | grep '^CRACK:')
     if [ -n "$_crack" ]; then
       : > "$_crackf"
       alerts="${alerts}$(printf '%s\n' "$_crack" | sed 's/^CRACK:/ALERT crack:/')"$'\n'
@@ -198,7 +199,7 @@ while true; do
   # at 0-for-5 for $11 and the monitor said OK throughout. pullstat distinguishes the two failure
   # shapes that matter -- quitting early (something is missing) versus hitting the cap (the budget
   # truncated real work).
-  _po=$(python "$SP/pullstat.py" --alerts 2>/dev/null)
+  _po=$(python "$KIT/pullstat.py" --alerts 2>/dev/null)
   [ -n "$_po" ] && alerts="${alerts}${_po}"$'\n'
 
   # 7. Red gate.
@@ -249,7 +250,7 @@ while true; do
     _last=$(cat "$SP/wlog/.last_summary" 2>/dev/null); _last=${_last:-0}
     if [ $(( $(now) - _last )) -ge "${SUMMARY_SECS:-1800}" ]; then
       echo "$(now)" > "$SP/wlog/.last_summary"
-      python "$SP/pullstat.py" 2>/dev/null | sed 's/^/    /' | grep -vE '^\s*$'
+      python "$KIT/pullstat.py" 2>/dev/null | sed 's/^/    /' | grep -vE '^\s*$'
     fi
     last_ok=$(now)
   fi

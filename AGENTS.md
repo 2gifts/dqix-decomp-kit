@@ -1,9 +1,17 @@
 # DQIX decomp kit
 
-This directory is `$SP`, the kit root. The decomp checkout is `$DQIX_REPO` (default
-`../dqix-decomp`, branch `decomp-matching`). Every script resolves both through `kitpaths.py`. In
-Git Bash, `export SP="$(pwd -W 2>/dev/null || pwd)"` from this directory. A session that runs from
-another directory sets `DQIX_SP` to the kit root; skills and workflows read it.
+This directory is `$KIT`, the kit checkout: scripts, docs and skills only. Everything the pipeline
+produces (attempts, logs, claims, staging, worker docs, knobs, `OPEN_WORK.md`, `STATE.md`) lives in
+`$SP`, the state directory outside the checkout: `$DQIX_STATE`, else the path in `state.path`, else
+`../dqix-kit-state`. The decomp checkout is `$DQIX_REPO` (default `../dqix-decomp`, branch
+`decomp-matching`). Every script resolves all three through `kitpaths.py`. In Git Bash, from this
+directory:
+
+    export KIT="$(pwd -W 2>/dev/null || pwd)"
+    export SP="$(python kitpaths.py state)"
+
+A session that runs from another directory sets `DQIX_KIT` to the checkout; skills and workflows
+read it.
 
 ## Before any work: update the kit
 
@@ -89,7 +97,5 @@ the user asks.
     the new text.
 17. Record work in progress in `OPEN_WORK.md` while working, not at the end. A fresh session starts
     from it.
-18. Every attempt, log, claim and staged match lives in the kit directory as a git-ignored file. In
-    the kit, never run `git clean`, `git reset --hard`, `git checkout -f`/`--force`, `git stash -u`/`-a`
-    or `git restore` on more than a named file: one of them erases that state for good. Updates go
-    through `kit_update.py` only.
+18. State stays in `$SP`, outside the checkout. Never write state into `$KIT` and never point
+    `state.path` or `DQIX_STATE` inside it. Update the checkout through `kit_update.py` only.

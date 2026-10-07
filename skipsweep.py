@@ -14,7 +14,8 @@ _kpsys.path.insert(0, _kpos.path.dirname(_kpos.path.abspath(__file__)))
 import kitpaths as _kp
 import glob, hashlib, os, re, subprocess, sys, time
 
-SP = os.path.dirname(os.path.abspath(__file__))
+SP = _kp.SP
+KIT = _kp.KIT
 REPO = _kp.REPO
 WATCH = f"{SP}/attempts"
 SEEN = f"{SP}/skipsweep_seen.txt"
@@ -48,7 +49,7 @@ def landed():
 
 
 def gate(mod, addr, path):
-    r = subprocess.run([sys.executable, f"{SP}/wgate.py", mod, addr, path],
+    r = subprocess.run([sys.executable, f"{KIT}/wgate.py", mod, addr, path],
                        capture_output=True, text=True, cwd=REPO, stdin=subprocess.DEVNULL)
     return ((r.stdout or "") + (r.stderr or "")).strip()
 
@@ -98,7 +99,7 @@ def cycle(seen):
         bind_name(mod, addr, cand)
         verdict = gate(mod, addr, cand)
         if not verdict.startswith("MATCH"):
-            subprocess.run([sys.executable, f"{SP}/colorsweep.py", mod, addr, cand,
+            subprocess.run([sys.executable, f"{KIT}/colorsweep.py", mod, addr, cand,
                             "--depth", "3", "--budget", "200", "--apply"],
                            capture_output=True, text=True, cwd=REPO, stdin=subprocess.DEVNULL)
             verdict = gate(mod, addr, cand)

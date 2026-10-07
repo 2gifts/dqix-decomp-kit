@@ -22,7 +22,8 @@ import re
 import subprocess
 import sys
 
-SP = os.path.dirname(os.path.dirname(os.path.abspath(__file__))).replace(chr(92), "/")
+SP = _kp.SP
+KIT = _kp.KIT
 REPO = _kp.REPO
 
 owner = {}
@@ -40,7 +41,7 @@ def gate(mod, addr, path, flags):
     env.pop("WGATE_SESSION", None)
     if flags:
         env["WGATE_FLAGS"] = flags
-    r = subprocess.run([sys.executable, f"{SP}/wgate.py", mod, addr, path],
+    r = subprocess.run([sys.executable, f"{KIT}/wgate.py", mod, addr, path],
                        capture_output=True, text=True, cwd=REPO, env=env)
     out = ((r.stdout or "") + (r.stderr or "")).strip().splitlines()
     return bool(out) and out[-1].strip() == "MATCH"

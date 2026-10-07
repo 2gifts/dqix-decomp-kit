@@ -10,7 +10,7 @@ import kitpaths as _kp
 import re
 import sys
 
-sys.path.insert(0, _kp.SP)
+sys.path.insert(0, _kp.KIT)
 import claim
 
 BANDS = [("small  <=64", 0, 64), ("medium 65-256", 65, 256), ("l- 257-512", 257, 512),

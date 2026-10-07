@@ -5,7 +5,7 @@ import json
 import os
 import sys
 
-sys.path.insert(0, (_kp.SP + "/frida"))
+sys.path.insert(0, (_kp.KIT + "/frida"))
 
 import colorforce  # noqa: E402
 import forcereal  # noqa: E402

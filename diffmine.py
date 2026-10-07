@@ -18,7 +18,8 @@ import subprocess
 import sys
 from collections import Counter, defaultdict
 
-SP = os.path.dirname(os.path.abspath(__file__))
+SP = _kp.SP
+KIT = _kp.KIT
 REPO = _kp.REPO
 MAXC = int(sys.argv[1]) if len(sys.argv) > 1 else 150
 
@@ -99,7 +100,7 @@ def main():
     for mod, addr, path in jobs:
         if done >= MAXC:
             break
-        r = subprocess.run([sys.executable, f"{SP}/sdiff.py", mod, addr, path, "1"],
+        r = subprocess.run([sys.executable, f"{KIT}/sdiff.py", mod, addr, path, "1"],
                            capture_output=True, text=True, cwd=REPO, stdin=subprocess.DEVNULL)
         out = r.stdout or ""
         if "COMPILE-FAIL" in out or "NO-SLOT" in out:

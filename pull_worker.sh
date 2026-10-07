@@ -13,17 +13,18 @@
 # only clamped the next session's cap, a 30-minute wall clock that guillotined large functions with
 # budget to spare, and a try count that a dollar cap already subsumes. Spend is MEASURED per session
 # from `--output-format json`, so the logs say what work actually cost rather than estimating it.
-SP="$(cd "$(dirname "${BASH_SOURCE[0]}")" && { pwd -W 2>/dev/null || pwd; })"
-REPO="${DQIX_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && { pwd -W 2>/dev/null || pwd; })/dqix-decomp}"
+KIT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && { pwd -W 2>/dev/null || pwd; })"
+SP="$(python "$KIT/kitpaths.py" state)"
+REPO="$(python "$KIT/kitpaths.py" repo)"
 MOD="${1:-main}"
 SLOT="${2:-1}"
 BUDGET="${3:-10}"
 PER_FUNC_CAP="${PER_FUNC_CAP:-3}"     # no single function may swallow the slot
 
 if [ "$MOD" = "main" ]; then
-  SRCDIR=$(python "$SP/srcdir.py" main); DOCS="worker_main.md"; DOCL="worker_mainL.md"; TAG="func_"; MARG="main"
+  SRCDIR=$(python "$KIT/srcdir.py" main); DOCS="worker_main.md"; DOCL="worker_mainL.md"; TAG="func_"; MARG="main"
 else
-  SRCDIR=$(python "$SP/srcdir.py" "$MOD"); DOCS="worker_ov.md"; DOCL="worker_ovL.md"
+  SRCDIR=$(python "$KIT/srcdir.py" "$MOD"); DOCS="worker_ov.md"; DOCL="worker_ovL.md"
   TAG="func_ov${MOD}_"; MARG="$MOD"
 fi
 
@@ -112,12 +113,12 @@ while :; do
   # with $1.18 and guaranteed the truncation. Every SESSION is already capped by size, which is the
   # limit that actually binds; total burn is set by how many slots run and for how long, both of
   # which are live knobs. One layer, not two.
-  ADDR=$(python "$SP/claim.py" "$MOD" 2>/dev/null | tr -d '\r\n ')
+  ADDR=$(python "$KIT/claim.py" "$MOD" 2>/dev/null | tr -d '\r\n ')
   [ -z "$ADDR" ] && { echo "$(date '+%H:%M') s$SLOT pool drained" >> "$LOG"; break; }
   # THIRD ARGUMENT IS REQUIRED. Without it scaffold.py prints to stdout and writes nothing, so the
   # prompt would send the worker to a scaffold path that does not exist.
   mkdir -p "$SP/scaffold"
-  python "$SP/scaffold.py" "$MARG" "$ADDR" "$SP/scaffold/$ADDR.cpp" >/dev/null 2>&1
+  python "$KIT/scaffold.py" "$MARG" "$ADDR" "$SP/scaffold/$ADDR.cpp" >/dev/null 2>&1
 
   # THE FREE REWRITES RUN BEFORE THE PAID SESSION, NOT AFTER IT. colorsweep only ever ran inside
   # repairsweep, on an hourly timer over a 475-candidate pool walked in order, so it had usually
@@ -127,14 +128,14 @@ while :; do
   #
   # An address with no artifact yet is skipped: there is nothing to rewrite until a first source
   # exists, which is what a worker is for.
-  _pre=$(timeout "${CLAIM_PRESWEEP_TIMEOUT:-240}" python "$SP/presweep.py" "$MARG" "$ADDR" 2>/dev/null | tr -d '\r')
+  _pre=$(timeout "${CLAIM_PRESWEEP_TIMEOUT:-240}" python "$KIT/presweep.py" "$MARG" "$ADDR" 2>/dev/null | tr -d '\r')
   case "$_pre" in
     MATCH*)
       _pf=${_pre#MATCH }
       mkdir -p "$STAGE"
       sed 's|^// SCRATCH-USA: func_|// USA: func_|' "$_pf" > "$STAGE/$ADDR.cpp" 2>/dev/null
       echo "$(date '+%H:%M') s$SLOT presweep MATCHED $ADDR for free -- no session spawned" >> "$LOG"
-      python "$SP/claim.py" "$MOD" --release "$ADDR" >/dev/null 2>&1
+      python "$KIT/claim.py" "$MOD" --release "$ADDR" >/dev/null 2>&1
       continue
       ;;
     IMPROVED*)
@@ -151,7 +152,7 @@ while :; do
   # keeps the procedure plus the recipes whose instruction shapes appear in THIS function's listing,
   # and indexes the rest up top with a fetch command. Costs no model tokens. Falls back to the static
   # doc if selection fails, because a truncated doc still beats no doc.
-  _sel=$(python "$SP/recipe_select.py" "$MARG" "$ADDR" 2>/dev/null | tr -d '\r' | tr '\\' '/')
+  _sel=$(python "$KIT/recipe_select.py" "$MARG" "$ADDR" 2>/dev/null | tr -d '\r' | tr '\\' '/')
   if [ -n "$_sel" ] && [ -f "$_sel" ]; then
     DOC="doc_cache/${_sel##*/}"
   else
@@ -176,7 +177,7 @@ while :; do
   # Ask for the MEASURED residue, never the queue: claim.py strikes an address out of
   # priority_<mod>.txt the moment it serves it, so a lookup there can never match the address whose
   # cap is being computed -- the first cut of this checked the queue and silently never fired.
-  _res=$(cd "$SP" && python nearmiss.py --residue "$ADDR" 2>/dev/null | tr -dc '0-9')
+  _res=$(python "$KIT/nearmiss.py" --residue "$ADDR" 2>/dev/null | tr -dc '0-9')
   if [ -n "$_res" ] && [ "$_res" -le "${NEARMISS_MAXB:-16}" ] 2>/dev/null; then
     _nm=$(_knob "$SP/CAP_NEARMISS" '0-9.' "${CAP_NEARMISS:-6}")
     _lo=$(python -c "print('$_nm' if float('$_nm') < float('$cap') else '$cap')" 2>/dev/null)
@@ -231,17 +232,18 @@ while :; do
   # work stops. A generous wall clock stays purely to unstick a session that has HUNG -- a stalled
   # process spends nothing, so the cost cap can never fire on it.
   WGATE_SESSION="$SESS" timeout -k 30 "${HANG_GUARD:-7200}" claude -p "DQIX decomp worker, module $MOD (write to $WIP/, read siblings in $SRCDIR/).
+Paths in the docs: \$KIT is $KIT (every script), \$SP is $SP (state: wip/, handwork/, scaffold/, wlog/).
 Read $SP/$DOC first — it is the only RECIPE doc. If it names an EARLIER ATTEMPTS file, read that
 one next, before you write anything: it holds every form already gated on this address and the
 residue each produced, so reproducing one costs a compile to learn what is already written down.
 ONE address this session: $ADDR
 A scaffold with every callee/data name already resolved is at $SP/scaffold/$ADDR.cpp — START FROM IT.
-Target listing: python $SP/wlist.py $MARG $ADDR
+Target listing: python $KIT/wlist.py $MARG $ADDR
 Match it to byte-exact READABLE C++, tag it \`// USA: ${TAG}${ADDR}\`, and write it to
 $WIP/ -- NOT into src/. The build compiles everything under src/, so an in-progress file
 there breaks every other worker's gate. wgate takes any path; the pipeline moves your file
 into the repo itself once it MATCHES.
-Done only when \`python $SP/wgate.py $MARG $ADDR <file>\` prints MATCH.
+Done only when \`python $KIT/wgate.py $MARG $ADDR <file>\` prints MATCH.
 No asm. No subagents.
 THE GATE DECIDES WHEN YOU ARE DONE, NOT YOU. Every wgate run prints a RESIDUE line naming the
 measured class of the remaining diff, and a GATE line with your best result so far and how many
@@ -250,7 +252,7 @@ Do not start another variant after a STOP, and do not stop before one while the 
 REGALLOC/SCHEDULING IS NOT A REASON TO STOP. colorsweep has ALREADY been run to exhaustion on the
 artifact you were handed, so do not open with it and do not report a residue it left as a wall --
 what remains is what its rules cannot express. Run it again only after you have CHANGED the source
-(\`python $SP/colorsweep.py $MARG $ADDR <your.cpp> --apply\`): it hill-climbs meaning-preserving
+(\`python $KIT/colorsweep.py $MARG $ADDR <your.cpp> --apply\`): it hill-climbs meaning-preserving
 rewrites for compile cost only, so it is worth a pass on each new form you write, never on the one
 you started from.
 Reply with exactly one line, and never go quiet instead:
@@ -279,10 +281,10 @@ gets for free, so this function's cost is not paid again on its siblings." \
     --disallowedTools "WebFetch" "WebSearch" "NotebookEdit" "Task" "Agent" "TodoWrite" "Artifact" "Monitor" "Skill" \
     --max-budget-usd "$cap" --output-format json \
     --allowedTools "Bash" "Write" "Read" "Edit" "Grep" "Glob" \
-    --add-dir "$SP" \
+    --add-dir "$SP" --add-dir "$KIT" \
     > "$OUT" 2>/dev/null < /dev/null &
   CPID=$!
-  "$SP/gatewatch.sh" "$MARG" "$ADDR" "$SESS" "$CPID" >/dev/null 2>&1 &
+  "$KIT/gatewatch.sh" "$MARG" "$ADDR" "$SESS" "$CPID" >/dev/null 2>&1 &
   WPID=$!
   wait "$CPID"
   kill "$WPID" 2>/dev/null
@@ -310,7 +312,7 @@ except Exception: print('$cap')          # unparseable: charge the cap, never no
   f=$(grep -rl "USA: ${TAG}${ADDR}" "$WIP" 2>/dev/null | head -1)
   [ -z "$f" ] && f=$(grep -rl "USA: ${TAG}${ADDR}" "$SRCDIR" 2>/dev/null | head -1)
   [ -z "$f" ] && f=$(grep -rl "USA: ${TAG}${ADDR}" "$STAGE" 2>/dev/null | head -1)
-  if [ -n "$f" ] && python "$SP/wgate.py" "$MARG" "$ADDR" "$f" 2>&1 | tail -1 | grep -q "^MATCH"; then
+  if [ -n "$f" ] && python "$KIT/wgate.py" "$MARG" "$ADDR" "$f" 2>&1 | tail -1 | grep -q "^MATCH"; then
     matched=$((matched+1)); v=MATCH
     # A MATCH THE INTEGRATOR CANNOT SEE IS NOT A MATCH. Workers write into $SRCDIR (inside the
     # repo), but pull_all picks the module to integrate by counting files in staging/<module>/ --
@@ -337,7 +339,7 @@ except Exception: print('$cap')          # unparseable: charge the cap, never no
     v=miss
     # CARRY WHAT THIS SESSION LEARNED. A big function needs more context than one session
     # has; without this the next pass starts from the scaffold again and can never converge.
-    python "$SP/handoff.py" "$SP/$DOC" "$ADDR" "$OUT" "$FSIZE" >> "$LOG" 2>&1
+    python "$KIT/handoff.py" "$SP/$DOC" "$ADDR" "$OUT" "$FSIZE" >> "$LOG" 2>&1
     # STAGING HOLDS MATCHES ONLY. A worker that fails still leaves its best attempt behind, and
     # every wave then copies that non-matching file into src/, watches classify reject it, and burns
     # a full rebuild reporting `committed 0`. That is what had main rebuilding every twelve minutes
@@ -361,7 +363,7 @@ except Exception: print('$cap')          # unparseable: charge the cap, never no
     # a match sat unswept for hours. It costs CPU, the address is still claimed, and a MATCH here is
     # a function closed for the price of a compile.
     if [ -f "$f" ] && [ "$v" != "MATCH" ]; then
-      _post=$(timeout "${POSTSWEEP_TIMEOUT:-900}" python "$SP/presweep.py" "$MARG" "$ADDR" "$f" --force 2>/dev/null | tr -d '\r')
+      _post=$(timeout "${POSTSWEEP_TIMEOUT:-900}" python "$KIT/presweep.py" "$MARG" "$ADDR" "$f" --force 2>/dev/null | tr -d '\r')
       case "$_post" in
         MATCH*)
           _pf=${_post#MATCH }
@@ -388,14 +390,14 @@ except Exception: print('$cap')          # unparseable: charge the cap, never no
       cp "$f" "$_dst" 2>/dev/null
       _keep="$_dst"
     fi
-    python "$SP/blocker.py" "$MARG" "$ADDR" "$_keep" "$FSIZE" >> "$LOG" 2>&1
+    python "$KIT/blocker.py" "$MARG" "$ADDR" "$_keep" "$FSIZE" >> "$LOG" 2>&1
   fi
 
   # RE-CAP THE DOC ON EVERY PATH. DOC_MAX is applied when recipe_select GENERATES the file, and the
   # session then appends its own handoff to that same file, so the artifact left on disk is bounded
   # by nobody. The regeneration that fixes it lived in the miss branch alone, which is why a MATCH
   # left 027_021db524.md at 59,502 bytes -- past the ~58KB Read limit the cap exists to respect.
-  python "$SP/recipe_select.py" "$MARG" "$ADDR" >/dev/null 2>&1
+  python "$KIT/recipe_select.py" "$MARG" "$ADDR" >/dev/null 2>&1
 
   # ONE FILE PER SESSION, AT MOST. Workers iterate by writing variant after variant, and every one
   # of them landed in staging: a single FAILED function left 8 files behind (022157f8), another 4.
@@ -445,7 +447,7 @@ EOF
   fi
   _swept=0
   echo "$(date '+%H:%M') s$SLOT $v $ADDR \$$cost (slot \$$spent/\$$BUDGET)" >> "$LOG"
-  (cd "$REPO" && python "$SP/pad/repool.py" --apply --rev a70058a0 >/dev/null 2>&1)
+  (cd "$REPO" && python "$KIT/pad/repool.py" --apply --rev a70058a0 >/dev/null 2>&1)
 done
 
 echo "$(date '+%H:%M') s$SLOT done: $matched/$tried matched, \$$spent spent" >> "$LOG"

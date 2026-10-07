@@ -20,7 +20,8 @@ import sys
 import capstone
 from elftools.elf.elffile import ELFFile
 
-SP = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SP = _kp.SP
+KIT = _kp.KIT
 REPO = _kp.REPO
 FUNC = 0x02061C04
 TABLE = (0x28, 0x240)

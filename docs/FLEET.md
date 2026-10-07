@@ -2,8 +2,8 @@
 
 The fleet runs the [WORKFLOW.md](WORKFLOW.md) loop unattended: Claude Code worker sessions match
 one function each, scripts land the matches. It spends real money for as long as it runs. Windows
-only; requires the `claude` CLI on PATH and logged in. Commands run from the kit root, with `SP` and
-`DQIX_REPO` exported as in [WORKFLOW.md](WORKFLOW.md).
+only; requires the `claude` CLI on PATH and logged in. Commands run from the kit checkout, with `KIT`,
+`SP` and `DQIX_REPO` exported as in [WORKFLOW.md](WORKFLOW.md).
 
 ## Process tree
 

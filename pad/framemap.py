@@ -27,7 +27,8 @@ import sys
 from capstone import Cs, CS_ARCH_ARM, CS_MODE_ARM, CS_MODE_THUMB
 from elftools.elf.elffile import ELFFile
 
-SP = os.path.dirname(os.path.dirname(os.path.abspath(__file__))).replace(chr(92), "/")
+SP = _kp.SP
+KIT = _kp.KIT
 REPO = _kp.REPO
 CC = buildcfg.cc_path(os.environ.get("MWCC"))
 FLAGS = list(buildcfg.FLAGS)

@@ -8,8 +8,9 @@
 #
 # Each module costs a full rebuild, so this is slow by nature -- the point is to clear the backlog
 # completely before a measurement window, not to be quick.
-SP="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO="${DQIX_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && { pwd -W 2>/dev/null || pwd; })/dqix-decomp}"
+KIT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && { pwd -W 2>/dev/null || pwd; })"
+SP="$(python "$KIT/kitpaths.py" state)"
+REPO="$(python "$(cd "$(dirname "${BASH_SOURCE[0]}")" && { pwd -W 2>/dev/null || pwd; })/kitpaths.py" repo)"
 LOG="$SP/wlog/integrate_all.log"
 
 echo "=== integrate_all $(date '+%m-%d %H:%M') ===" >> "$LOG"
@@ -22,10 +23,10 @@ for d in $(ls -d "$SP"/staging/*/ 2>/dev/null \
   mod=${tag#ov}                        # finish_wave takes main | NNN
   n=$(ls "$d"*.cpp 2>/dev/null | wc -l)
   echo "$(date '+%H:%M') --- $tag: $n staged ---" >> "$LOG"
-  bash "$SP/finish_wave.sh" "$mod" >> "$SP/wlog/int_${tag}.log" 2>&1
+  bash "$KIT/finish_wave.sh" "$mod" >> "$SP/wlog/int_${tag}.log" 2>&1
   tail -1 "$SP/wlog/int_${tag}.log" >> "$LOG"
 done
 
 echo "$(date '+%H:%M') === done ===" >> "$LOG"
-python "$SP/cov.py" >> "$LOG" 2>&1
+python "$KIT/cov.py" >> "$LOG" 2>&1
 tail -3 "$LOG"

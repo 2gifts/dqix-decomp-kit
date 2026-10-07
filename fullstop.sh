@@ -20,8 +20,9 @@
 #
 # NEVER touches interactive `claude.exe` sessions -- a worker is identified by ` -p ` on its command
 # line. The operator has unrelated Claude sessions open.
-SP="$(cd "$(dirname "${BASH_SOURCE[0]}")" && { pwd -W 2>/dev/null || pwd; })"
-REPO="${DQIX_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && { pwd -W 2>/dev/null || pwd; })/dqix-decomp}"
+KIT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && { pwd -W 2>/dev/null || pwd; })"
+SP="$(python "$KIT/kitpaths.py" state)"
+REPO="$(python "$KIT/kitpaths.py" repo)"
 MODE="${1:-soft}"
 DRY=0
 [ "$MODE" = "--dry" ] && DRY=1
@@ -40,7 +41,7 @@ SPENDERS='supervise\.sh|run_all\.sh|run_module\.sh|run_overlay\.sh|run_main\.sh|
 # `python -u repairsweep.py` drivers survived a --hard stop on 2026-09-05, immediately respawned
 # their colorsweep children, and the kill line reported success. So match the script BASENAMES too,
 # read off disk for the same reason the path match exists -- a list read at run time cannot go stale.
-_cpunames=$(ls "$SP"/*.py "$SP"/*.sh 2>/dev/null | xargs -n1 basename 2>/dev/null \
+_cpunames=$(ls "$KIT"/*.py "$KIT"/*.sh 2>/dev/null | xargs -n1 basename 2>/dev/null \
             | sed 's/\./\\./g' | paste -sd'|' -)
 CPUJOBS="dqix.sp|handwork.evo|permuter\.py${_cpunames:+|$_cpunames}"
 # Monitors and their children. These spend nothing, but a stop that leaves them running is not a

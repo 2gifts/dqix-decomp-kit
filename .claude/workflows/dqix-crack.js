@@ -17,21 +17,22 @@ const LEVERS = A.levers || []
 
 const PATHS_SCHEMA = {
   type: 'object',
-  properties: { sp: { type: 'string' }, repo: { type: 'string' } },
-  required: ['sp', 'repo'],
+  properties: { kit: { type: 'string' }, sp: { type: 'string' }, repo: { type: 'string' } },
+  required: ['kit', 'sp', 'repo'],
 }
 async function kitPaths() {
-  if (A.sp && A.repo) return { sp: A.sp, repo: A.repo }
-  const root = A.sp || '${DQIX_SP:-.}'
+  if (A.kit && A.sp && A.repo) return { kit: A.kit, sp: A.sp, repo: A.repo }
+  const root = A.kit || '${DQIX_KIT:-.}'
   const r = await agent(
     `Run exactly this one command and nothing else:
-cd "${root}" && python -c "import kitpaths as k; print(k.SP); print(k.REPO)"
-Return the first line it prints as sp and the second as repo, verbatim. Do not edit anything.`,
+cd "${root}" && python -c "import kitpaths as k; print(k.KIT); print(k.SP); print(k.REPO)"
+Return the first line it prints as kit, the second as sp and the third as repo, verbatim. Do not edit anything.`,
     { label: 'paths', schema: PATHS_SCHEMA, effort: 'low' })
-  if (!r) throw new Error('could not resolve the kit paths; pass args.sp and args.repo')
-  return { sp: A.sp || r.sp, repo: A.repo || r.repo }
+  if (!r) throw new Error('could not resolve the kit paths; pass args.kit, args.sp and args.repo')
+  return { kit: A.kit || r.kit, sp: A.sp || r.sp, repo: A.repo || r.repo }
 }
 const PATHS = await kitPaths()
+const KIT = PATHS.kit
 const SP = PATHS.sp
 const REPO = PATHS.repo
 
@@ -74,9 +75,9 @@ different places is not colourable at all. Read the mapping wgate prints and pre
 one even when it is a few bytes worse. Say which you chose and why.
 
 COMMANDS:
-    gate:    cd ${REPO} && python ${SP}/wgate.py ${MOD} ${ADDR} <yourfile>
-    inspect: cd ${REPO} && python ${SP}/wdiff.py ${MOD} ${ADDR} <yourfile>
-    listing: python ${SP}/wlist.py ${MOD} ${ADDR}
+    gate:    cd ${REPO} && python ${KIT}/wgate.py ${MOD} ${ADDR} <yourfile>
+    inspect: cd ${REPO} && python ${KIT}/wdiff.py ${MOD} ${ADDR} <yourfile>
+    listing: python ${KIT}/wlist.py ${MOD} ${ADDR}
 Concurrent gating is safe -- wgate uses a per-pid object file.
 
 RULES: work only on your own copy under ${SP}/handwork/. Never edit src/, attempts/, the base file,

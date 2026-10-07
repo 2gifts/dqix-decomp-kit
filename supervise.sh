@@ -11,8 +11,9 @@
 # run_all.sh clears USAGE_LIMIT_STOP on launch and holds run_all.lock while alive, so this loop is
 # just: if it is not running, start it. The lock makes a double-launch impossible.
 # Usage: bash supervise.sh    (run detached; it never exits on its own)
-SP="$(cd "$(dirname "${BASH_SOURCE[0]}")" && { pwd -W 2>/dev/null || pwd; })"
-REPO="${DQIX_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && { pwd -W 2>/dev/null || pwd; })/dqix-decomp}"
+KIT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && { pwd -W 2>/dev/null || pwd; })"
+SP="$(python "$KIT/kitpaths.py" state)"
+REPO="$(python "$KIT/kitpaths.py" repo)"
 # pull_all.sh replaced run_all.sh on 2026-08-20 and this file kept relaunching the DELETED script,
 # so the whole point of the supervisor -- coming back by itself after a usage-limit stop -- had been
 # silently dead ever since. `pull_all` writes its own pid file and removes it on exit, so use that
@@ -41,7 +42,7 @@ while true; do
   # stale pid file from a killed/crashed run would block pull_all's own guard; clear it first
   [ -f "$LOCK" ] && rm -f "$LOCK"
   echo "$(date '+%m-%d %H:%M:%S') pull_all not running -> launching" >> "$LOG"
-  bash "$SP/pull_all.sh" >> "$SP/wlog/pull_all_stdout.log" 2>&1
+  bash "$KIT/pull_all.sh" >> "$SP/wlog/pull_all_stdout.log" 2>&1
   echo "$(date '+%m-%d %H:%M:%S') pull_all exited (rc=$?)" >> "$LOG"
   # Back off before relaunching. If it stopped on a usage limit the account needs time to refill;
   # relaunching immediately would spawn a wave that instantly re-hits the limit, and every truncated

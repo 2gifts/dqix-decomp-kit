@@ -9,7 +9,7 @@ import threading
 
 import frida
 
-sys.path.insert(0, (_kp.SP + "/frida"))
+sys.path.insert(0, (_kp.KIT + "/frida"))
 import schedforce as sf  # noqa: E402
 
 USAGE = "pressforce.py <src> <mod> <addr> <size> [off:p1b77 ...] [lim:p1b77=+4 ...] [dump:p1b77 ...]"

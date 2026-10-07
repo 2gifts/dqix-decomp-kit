@@ -6,10 +6,11 @@ import os
 import re
 import sys
 
-SP = os.path.dirname(os.path.abspath(__file__))
+SP = _kp.SP
+KIT = _kp.KIT
 TSV = os.environ.get("LEVERCHECK_TSV", f"{SP}/wlog/levers.tsv")
 DOCS = os.environ.get("LEVERCHECK_DOCS",
-                      os.pathsep.join((f"{SP}/worker_src/core.md", f"{SP}/worker_src/deadends.md"))).split(os.pathsep)
+                      os.pathsep.join((f"{KIT}/worker_src/core.md", f"{KIT}/worker_src/deadends.md"))).split(os.pathsep)
 DECLINED = os.environ.get("LEVERCHECK_DECLINED", f"{SP}/wlog/levers_declined.txt")
 BOARDS = os.environ.get("LEVERCHECK_BOARDS", f"{SP}/handwork")
 CFG = os.environ.get("LEVERCHECK_CFG", (_kp.REPO + "/config/usa/arm9"))

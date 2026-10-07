@@ -20,6 +20,7 @@ import kitpaths as _kp
 import re, sys, os, subprocess, itertools, shutil
 
 SP = _kp.SP
+KIT = _kp.KIT
 MOD, ADDR, SRC = sys.argv[1], sys.argv[2], sys.argv[3]
 MAXV = int(sys.argv[4]) if len(sys.argv) > 4 else 400
 
@@ -103,7 +104,7 @@ def render(order, split_set):
 def gate(text):
     p = f"{SP}/lab/perm_{os.getpid()}.cpp"
     open(p, 'w', encoding='utf-8').write(head + '\n'.join(text) + tail)
-    r = subprocess.run(["python", f"{SP}/wgate.py", MOD, ADDR, p],
+    r = subprocess.run(["python", f"{KIT}/wgate.py", MOD, ADDR, p],
                        capture_output=True, text=True)
     o = (r.stdout + r.stderr).strip()
     if o.startswith("MATCH"):

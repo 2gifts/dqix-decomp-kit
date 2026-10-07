@@ -18,7 +18,8 @@ import re
 import subprocess
 import sys
 
-SP = os.path.dirname(os.path.abspath(__file__)).replace(chr(92), "/")
+SP = _kp.SP
+KIT = _kp.KIT
 REPO = _kp.REPO
 PRAGMA = re.compile(r"(?m)^[ \t]*#[ \t]*pragma[ \t]+(?:opt_propagation|opt_common_subs)\b[^\n]*\n")
 TAG = re.compile(r"(?m)^//\s*USA:\s*func_(?:ov(\d+)_)?([0-9a-fA-F]{8})\b")
@@ -35,7 +36,7 @@ OUT = f"{SP}/wlog/proppurge"
 
 
 def gate(mod, addr, path):
-    r = subprocess.run([sys.executable, f"{SP}/wgate.py", mod, addr, path],
+    r = subprocess.run([sys.executable, f"{KIT}/wgate.py", mod, addr, path],
                        capture_output=True, text=True, env=ENV)
     lines = (r.stdout + r.stderr).splitlines()
     if any(l.strip() == "MATCH" for l in lines):
@@ -84,7 +85,7 @@ def main():
             land(path, text, stripped, addr)
             continue
 
-        r = subprocess.run([sys.executable, f"{SP}/colorsweep.py", mod, addr, WORK,
+        r = subprocess.run([sys.executable, f"{KIT}/colorsweep.py", mod, addr, WORK,
                             "--budget", str(BUDGET), "--apply"],
                            capture_output=True, text=True, env=ENV)
         best = [l.strip() for l in (r.stdout + r.stderr).splitlines()

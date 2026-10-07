@@ -24,7 +24,8 @@ _kpsys.path.insert(0, _kpos.path.dirname(_kpos.path.abspath(__file__)))
 import kitpaths as _kp
 import glob, os, re, sys, collections
 
-SP = os.path.dirname(os.path.abspath(__file__)).replace("\\", "/")
+SP = _kp.SP
+KIT = _kp.KIT
 REPO = _kp.REPO
 
 POOLS = ["hold_*/*.cpp", "*_stage/*.cpp", "staging/*/*.cpp", "*_reclaim/*.cpp",
@@ -164,7 +165,7 @@ def priors():
     """addr -> [prior files], best first."""
     by = collections.defaultdict(list)
     for pat in POOLS:
-        for f in glob.glob(f"{SP}/{pat}"):
+        for f in glob.glob(f"{KIT if pat.startswith('priors/') else SP}/{pat}"):
             m = re.search(r'(0[0-9a-f]{7})', os.path.basename(f))
             if m:
                 by[m.group(1).lower()].append(f.replace("\\", "/"))

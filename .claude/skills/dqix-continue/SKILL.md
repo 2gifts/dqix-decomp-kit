@@ -9,7 +9,9 @@ The previous session is gone and will not be resumed. Everything you need is on 
 reconstruct state from a conversation summary or from memory files** — memories record what was true
 when they were written, and the last session may have died mid-address.
 
-    SP    the kit root: $DQIX_SP when set, else this session's working directory
+    KIT   the kit checkout (scripts, docs, skills): $DQIX_KIT when set, else this session's
+          working directory
+    SP    the state directory (attempts, logs, claims, staging): `python $KIT/kitpaths.py state`
     REPO  $DQIX_REPO, or ../dqix-decomp
 
 **Nothing that matters may live in a path something else clears** — not `%TEMP%`, not
@@ -22,8 +24,8 @@ when they were written, and the last session may have died mid-address.
 `decomp-matching`. A bare `claude.exe` is an interactive session someone may be using; only a
 `claude.exe` with ` -p ` in its command line is a worker of ours.
 
-    bash $SP/fullstop.sh          # spend dies now; CPU-only jobs are left to finish
-    bash $SP/fullstop.sh --dry    # report both tiers, kill nothing
+    bash $KIT/fullstop.sh          # spend dies now; CPU-only jobs are left to finish
+    bash $KIT/fullstop.sh --dry    # report both tiers, kill nothing
 
 Tier 1 (workers, drivers, supervisors) is killed immediately and re-checked twice, because a
 detached `claude.exe -p` survives a POSIX kill, gets reparented, and keeps spending with nothing
@@ -46,7 +48,7 @@ Also sweep the leftovers that cost nothing but confuse every later check: detach
     ls -la $SP/USAGE_LIMIT_STOP $SP/FLEET_STOPPED $SP/STOP_PULL 2>/dev/null
 
 If the file is absent, read the last worker's stderr for the reset line and parse it with
-`python $SP/until_reset.py "<the resets … line>"` — it prints seconds to reset, or
+`python $KIT/until_reset.py "<the resets … line>"` — it prints seconds to reset, or
 `-1` when the reset is days out, which is the weekly limit.
 
 **Main-thread work is NOT free.** This session's tokens and every worker's come from one budget;
@@ -58,16 +60,16 @@ a lockout — each one pays full startup and then dies on its first API call.
 
 Update the kit first, now that nothing is running:
 
-    python $SP/kit_update.py
+    python $KIT/kit_update.py
 
 Exit 0: re-read every `RE-READ` file it prints (this skill included). Exit 2 means something is still
 running, so step 1 is not done. Exit 1 or 3: tell the user the line it printed and do not re-enter the
 plan until they answer.
 
     cd $REPO
-    python $SP/selfcheck.py          # every invariant holds — a red is REAL, not a standing exception
-    python $SP/regress.py            # 0 failed  (--slow adds the end-to-end crack tests)
-    python $SP/pipetest.py           # 0 wrong, 0 gate holes
+    python $KIT/selfcheck.py          # every invariant holds — a red is REAL, not a standing exception
+    python $KIT/regress.py            # 0 failed  (--slow adds the end-to-end crack tests)
+    python $KIT/pipetest.py           # 0 wrong, 0 gate holes
 
 **There are no standing reds.** If `selfcheck` is not all green, the last pipeline edit is the
 suspect — do not wave it through.
@@ -75,7 +77,7 @@ suspect — do not wave it through.
 **`regress.py --slow` is mandatory after any edit to `wgate.py`, `wdiff.py` or `colorsweep.py`** —
 `selfcheck` goes red until it has been run, and that red is the reminder, not a fault.
 
-`python $SP/progress.py --print` regenerates `STATE.md` (fleet, coverage, HEAD, staged work) and
+`python $KIT/progress.py --print` regenerates `STATE.md` (fleet, coverage, HEAD, staged work) and
 prints it.
 
 **After any rebuild, exercise the WINNING path before trusting a "0 hits" report** — stage a hit,
@@ -88,7 +90,7 @@ rule encodes each one, which residues are open with the experiments already disp
 last session was in the middle of. Process lists and coverage tell you what was running; only this
 file tells you what was being *worked on*.
 
-    python $SP/progress.py --print                # THE state: fleet, bytes+funcs, staged, health
+    python $KIT/progress.py --print                # THE state: fleet, bytes+funcs, staged, health
     git -C $REPO log --oneline -8
     git -C $REPO status --short | head -20
     tail -3 $SP/wlog/pull_all.log                 # what the dispatcher was doing when it died
@@ -132,10 +134,10 @@ In this order:
    deletions. `git -C $REPO checkout -- src/` before anything else.
 2. **Stale wave lock.** `$SP/wave.lock` is a directory holding the owner's pid. `finish_wave` clears
    a lock whose owner is dead, but verify: `cat $SP/wave.lock/pid` and check that pid is alive.
-3. **Stale claims.** A killed worker leaves its address claimed. `python $SP/claim.py <mod> --status`;
+3. **Stale claims.** A killed worker leaves its address claimed. `python $KIT/claim.py <mod> --status`;
    release with `--release <addr>`.
 4. **Matched-but-uncommitted source.** Anything in `$SP/staging/*/` is stranded work that only a
-   commit makes safe. Land it with `bash $SP/integrate_fast.sh` — as a background call, since a
+   commit makes safe. Land it with `bash $KIT/integrate_fast.sh` — as a background call, since a
    foreground one is killed at 10 minutes and can empty `src/`.
 
 A half-finished attempt file in `attempts/` is **not** damage — it is the prior the sweeps read.
@@ -143,7 +145,7 @@ Leave it.
 
 ## 6. Re-enter the plan
 
-Read `/dqix-plan` (`$SP/.claude/skills/dqix-plan/SKILL.md`) and rejoin at the phase the disk says you
+Read `/dqix-plan` (`$KIT/.claude/skills/dqix-plan/SKILL.md`) and rejoin at the phase the disk says you
 are in. The order there is: the big function in this thread, the free sweeps in the background, and
 every crack turned into a colorsweep rule. **Paid workers are off unless the user asks for one in
 this session.**
@@ -151,8 +153,8 @@ this session.**
 Bring the watches back with anything you start — a fleet with no alerting monitor is how a stuck run
 survives a whole session unnoticed:
 
-* `$SP/health.sh` — the alerting fleet monitor (stall, zero-yield wave, hung worker, cost per match).
-* `bash $SP/leverwatch.sh --once` as a BACKGROUND Bash (`run_in_background`), never under Monitor.
+* `$KIT/health.sh` — the alerting fleet monitor (stall, zero-yield wave, hung worker, cost per match).
+* `bash $KIT/leverwatch.sh --once` as a BACKGROUND Bash (`run_in_background`), never under Monitor.
   It blocks until a lever nobody has promoted appears — a worker's `levers.tsv` row, or a LANDED
   evolve board whose address `core.md` does not cite — prints it once, and exits; re-arm it after it
   fires. Under Monitor it only ever idles out every 30 minutes, a wasted turn each time. On a

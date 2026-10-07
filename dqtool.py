@@ -23,7 +23,8 @@ import re
 import sys
 
 REPO = _kp.REPO
-SP = os.path.dirname(os.path.abspath(__file__))
+SP = _kp.SP
+KIT = _kp.KIT
 
 
 def cfg_for(mod):

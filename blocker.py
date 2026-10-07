@@ -5,13 +5,17 @@
 
 Appends one row to wlog/blockers.tsv: epoch, module, addr, size, class, metric, detail, evidence.
 """
+import os as _kpos, sys as _kpsys
+_kpsys.path.insert(0, _kpos.path.dirname(_kpos.path.abspath(__file__)))
+import kitpaths as _kp
 import os
 import re
 import subprocess
 import sys
 import time
 
-SP = os.path.dirname(os.path.abspath(__file__))
+SP = _kp.SP
+KIT = _kp.KIT
 TSV = f"{SP}/wlog/blockers.tsv"
 RESIDUE_LINE = re.compile(r"^RESIDUE\s+(\S+)\s+(-?\d+)\s*(.*)$", re.M)
 
@@ -20,7 +24,7 @@ def gate_residue(mod, addr, src):
     env = dict(os.environ)
     env["WGATE_CALLER"] = "blocker"
     env.pop("WGATE_SESSION", None)
-    proc = subprocess.run([sys.executable, f"{SP}/wgate.py", mod, addr, src],
+    proc = subprocess.run([sys.executable, f"{KIT}/wgate.py", mod, addr, src],
                           capture_output=True, text=True, env=env)
     text = (proc.stdout or "") + (proc.stderr or "")
     hit = RESIDUE_LINE.search(text)

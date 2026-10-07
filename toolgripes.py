@@ -10,6 +10,9 @@ A verdict naming a TOOL is a bug report. This surfaces them so none is read once
 
     python toolgripes.py [--hours N] [--all]
 """
+import os as _kpos, sys as _kpsys
+_kpsys.path.insert(0, _kpos.path.dirname(_kpos.path.abspath(__file__)))
+import kitpaths as _kp
 import glob
 import json
 import os
@@ -17,7 +20,8 @@ import re
 import sys
 import time
 
-SP = os.path.dirname(os.path.abspath(__file__))
+SP = _kp.SP
+KIT = _kp.KIT
 HOURS = float(sys.argv[sys.argv.index("--hours") + 1]) if "--hours" in sys.argv else 24.0
 ALL = "--all" in sys.argv
 
@@ -68,4 +72,4 @@ for ts, name, cost, hits in rows:
     print()
 if rows:
     print("Each of these is a bug report. Fix the tool, then re-gate the function for free with")
-    print("`python $SP/pad/retry_failed.py <mod>:<addr>` before spending another session on it.")
+    print("`python $KIT/pad/retry_failed.py <mod>:<addr>` before spending another session on it.")

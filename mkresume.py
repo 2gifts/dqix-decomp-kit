@@ -3,6 +3,7 @@
 Shared by pull_worker.sh's resume path and resume_one.sh so the two cannot drift; the wording that
 tells a session to start from a near-miss lives in exactly one place.
 """
+import os
 import sys
 
 
@@ -15,7 +16,7 @@ def ruled_out(sp, addr):
     reporting those same levers inert. It was paying to rediscover a written-down result.
     """
     try:
-        sys.path.insert(0, sp)
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
         import resumable
         best, reason = resumable.skips().get(addr.lower(), (None, ""))
     except Exception:
@@ -56,7 +57,7 @@ def main():
             "A PREVIOUS SESSION GOT CLOSE AND ITS BEST ATTEMPT IS SAVED AT:\n"
             f"    {prior}\n"
             "START FROM THAT FILE, NOT FROM THE SCAFFOLD. Copy it, then gate it FIRST:\n"
-            f"    python {sp}/wgate.py {marg} {addr} <yourfile>\n"
+            f"    python {os.path.dirname(os.path.abspath(__file__))}/wgate.py {marg} {addr} <yourfile>\n"
             "That prints exactly what remains. Close THAT residual -- do not rewrite the function from\n"
             "scratch, because the expensive part is already done and a small residual is usually one\n"
             "transformation away. Walk the MANDATORY PRE-SKIP CHECKLIST in the doc by symptom, and\n"

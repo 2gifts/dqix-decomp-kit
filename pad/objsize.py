@@ -26,7 +26,8 @@ import sys
 
 from elftools.elf.elffile import ELFFile
 
-SP = os.path.dirname(os.path.dirname(os.path.abspath(__file__))).replace(chr(92), "/")
+SP = _kp.SP
+KIT = _kp.KIT
 REPO = _kp.REPO
 FLAGS = list(buildcfg.FLAGS)
 

@@ -40,8 +40,9 @@
 #   bash merge_human.sh <number>     merge that PR's head
 #   bash merge_human.sh <ref>        merge a ref the user named explicitly
 set -u
-SP="$(cd "$(dirname "${BASH_SOURCE[0]}")" && { pwd -W 2>/dev/null || pwd; })"
-REPO="${DQIX_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && { pwd -W 2>/dev/null || pwd; })/dqix-decomp}"
+KIT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && { pwd -W 2>/dev/null || pwd; })"
+SP="$(python "$KIT/kitpaths.py" state)"
+REPO="$(python "$KIT/kitpaths.py" repo)"
 UPSTREAM="DQIX/dqix-decomp"
 cd "$REPO" || exit 2
 mkdir -p "$SP/wlog"
@@ -83,7 +84,7 @@ PRE=$(git rev-parse HEAD)
 
 repool_pools() {
   echo "$PRE" > "$SP/wlog/last_merge_base.txt"
-  python "$SP/pad/repool.py" --apply --rev "$PRE" > "$SP/wlog/repool_merge.log" 2>&1
+  python "$KIT/pad/repool.py" --apply --rev "$PRE" > "$SP/wlog/repool_merge.log" 2>&1
   echo "  pools: $(tail -1 "$SP/wlog/repool_merge.log")"
 }
 
@@ -107,7 +108,7 @@ done
 # range a human file now covers (left on disk they are orphans nothing builds).
 CFG=$(git diff --name-only --diff-filter=U)
 if [ -n "$CFG" ]; then
-  python "$SP/union_merge.py" $CFG > "$SP/wlog/merge_human.log" 2>&1
+  python "$KIT/union_merge.py" $CFG > "$SP/wlog/merge_human.log" 2>&1
   grep -E "^UNION" "$SP/wlog/merge_human.log"
   grep "^DROP-FILE " "$SP/wlog/merge_human.log" | sed 's/^DROP-FILE //' | while read -r d; do
     [ -f "$d" ] && git rm -q --ignore-unmatch "$d" && echo "  removed superseded $d"
@@ -124,8 +125,8 @@ if [ -n "$CFG" ]; then
   fi
 fi
 
-python "$SP/fix_includes.py"
-python "$SP/rename_symbols.py" HEAD
+python "$KIT/fix_includes.py"
+python "$KIT/rename_symbols.py" HEAD
 python tools/configure.py usa --no-extract > "$SP/wlog/merge_configure.log" 2>&1 || { echo "merge_human: configure FAILED"; exit 1; }
 # configure exits 0 on this, but delinks naming a file we do not have means a DROP-FILE
 # deleted a source we still build, or a record survived a rename. Both silently unmatch it.
@@ -140,8 +141,8 @@ for i in 1 2 3 4 5 6 7 8; do
     echo "merge_human: ninja check PASSES after $((i - 1)) repair rounds"
     break
   fi
-  python "$SP/relink_undefined.py" "$SP/wlog/merge_check.log" > "$SP/wlog/relink_$i.log" 2>&1
-  bash "$SP/merge_fixups.sh" >/dev/null
+  python "$KIT/relink_undefined.py" "$SP/wlog/merge_check.log" > "$SP/wlog/relink_$i.log" 2>&1
+  bash "$KIT/merge_fixups.sh" >/dev/null
   echo "  round $i: $(grep -c '^  [A-Za-z_]' "$SP/wlog/relink_$i.log") call sites repointed"
 
   # Symbols we still declare that nothing defines any more, and symbols the

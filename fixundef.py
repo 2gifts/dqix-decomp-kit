@@ -14,7 +14,8 @@ _kpsys.path.insert(0, _kpos.path.dirname(_kpos.path.abspath(__file__)))
 import kitpaths as _kp
 import os, re, subprocess, sys, glob
 
-SP = os.path.dirname(os.path.abspath(__file__))
+SP = _kp.SP
+KIT = _kp.KIT
 REPO = _kp.REPO
 mod, addr, src = sys.argv[1], sys.argv[2], sys.argv[3]
 
@@ -57,7 +58,7 @@ def ensure_extern_c(txt, name):
 
 
 for rnd in range(8):
-    r = subprocess.run([sys.executable, f"{SP}/wgate.py", mod, addr, src],
+    r = subprocess.run([sys.executable, f"{KIT}/wgate.py", mod, addr, src],
                        capture_output=True, text=True, cwd=REPO, stdin=subprocess.DEVNULL)
     out = (r.stdout or "") + (r.stderr or "")
     if not out.startswith("UNDEF-SYM"):

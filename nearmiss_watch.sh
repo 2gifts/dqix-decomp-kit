@@ -8,7 +8,8 @@
 #
 # This is a standalone loop only because pull_all.sh was mid-function with an opus worker when it
 # was written; it belongs in that loop next to the repair sweep, at the next quiesce.
-SP="$(cd "$(dirname "${BASH_SOURCE[0]}")" && { pwd -W 2>/dev/null || pwd; })"
+KIT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && { pwd -W 2>/dev/null || pwd; })"
+SP="$(python "$KIT/kitpaths.py" state)"
 EVERY="${1:-900}"
 LOG="$SP/wlog/nearmiss_watch.log"
 if [ -f "$SP/nearmiss_watch.pid" ] && kill -0 "$(cat "$SP/nearmiss_watch.pid" 2>/dev/null)" 2>/dev/null; then
@@ -21,7 +22,7 @@ trap 'rm -f "$SP/nearmiss_watch.pid"' EXIT
 
 while :; do
   [ -e "$SP/STOP_PULL" ] && { echo "$(date '+%H:%M') stop flag" >> "$LOG"; break; }
-  n=$(cd "$SP" && python nearmiss.py --write-priority 2>&1 | grep -cE '^ *[0-9]+ +[0-9]+ ')
+  n=$(python "$KIT/nearmiss.py" --write-priority 2>&1 | grep -cE '^ *[0-9]+ +[0-9]+ ')
   echo "$(date '+%H:%M') queue rebuilt: $n near-miss function(s)" >> "$LOG"
   sleep "$EVERY"
 done

@@ -11,6 +11,7 @@ from collections import Counter
 
 REPO = _kp.REPO
 SP = _kp.SP
+KIT = _kp.KIT
 POOLS = ["attempts", "clsbest", "quarantine", "wip"] + sorted(
     os.path.basename(p) for p in glob.glob(SP + "/hold*"))
 SYM = re.compile(r"(\S+) kind:(\w+)\S* addr:0x([0-9a-fA-F]{8})")
@@ -207,7 +208,7 @@ def locate(path, text):
 
 
 def gate(mod, addr, path):
-    r = subprocess.run([sys.executable, SP + "/wgate.py", mod, addr, path], capture_output=True, text=True,
+    r = subprocess.run([sys.executable, KIT + "/wgate.py", mod, addr, path], capture_output=True, text=True,
                        cwd=REPO, env={**os.environ, "WGATE_ALLOW_COMMITTED": "1"})
     out = (r.stdout + r.stderr).strip().splitlines()
     return next((ln for ln in out if "COMPILE-FAIL" in ln or "NO-COMPILE" in ln), out[-1] if out else "no output")

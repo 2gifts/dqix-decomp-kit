@@ -24,6 +24,7 @@ import kitpaths as _kp
 import re, sys, os, glob, subprocess
 
 SP = _kp.SP
+KIT = _kp.KIT
 REPO = _kp.REPO
 
 SYMS, BOUNDS = {}, {}
@@ -171,7 +172,7 @@ if sys.argv[1] == "--all":
     out = f"{SP}/scaffold"; os.makedirs(out, exist_ok=True)
     skip = set()
     for f in ("skiplist_ov.txt", "skiplist_main.txt"):
-        q = f"{SP}/{f}"
+        q = f"{KIT}/{f}"
         if os.path.exists(q):
             skip |= {l.split()[0].lower() for l in open(q) if l.strip()}
     n = 0

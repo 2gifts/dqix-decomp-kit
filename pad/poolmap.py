@@ -15,8 +15,9 @@ import sys
 
 from elftools.elf.elffile import ELFFile
 
-SP = os.path.dirname(os.path.dirname(os.path.abspath(__file__))).replace("\\", "/")
-sys.path.insert(0, SP)
+SP = _kp.SP
+KIT = _kp.KIT
+sys.path.insert(0, KIT)
 import buildcfg
 
 REPO = _kp.REPO
@@ -54,7 +55,7 @@ for p in [f"{REPO}/config/usa/arm9/symbols.txt"] + glob.glob(f"{REPO}/config/usa
     for s in re.finditer(r"^(\S+) kind:\S+ addr:0x([0-9a-fA-F]{8})", open(p, encoding="utf-8", errors="ignore").read(), re.M):
         addr_of.setdefault(s.group(1), int(s.group(2), 16))
 
-obj = f"{SP}/pad/poolmap_{os.getpid()}.o"
+obj = f"{KIT}/pad/poolmap_{os.getpid()}.o"
 r = subprocess.run([CC] + FLAGS + ["-c", SRC, "-o", obj], capture_output=True, text=True)
 if r.returncode != 0:
     sys.exit("COMPILE-FAIL: " + (r.stdout + r.stderr)[-600:])

@@ -11,9 +11,13 @@ was recorded as a miss.
 
 Run this after any sweep, never during one -- the sweep appends to the same file.
 """
+import os as _kpos, sys as _kpsys
+_kpsys.path.insert(0, _kpos.path.dirname(_kpos.path.abspath(__file__)))
+import kitpaths as _kp
 import json, os, re, sys
 
-SP = os.path.dirname(os.path.abspath(__file__)).replace("\\", "/")
+SP = _kp.SP
+KIT = _kp.KIT
 DONE = f"{SP}/wlog/resume_done.txt"
 # What a worker actually writes when it succeeds. PASS and OK are the two the pipeline's own gate
 # prints, so a verdict parser that only knows MATCH is narrower than the tools it reads.

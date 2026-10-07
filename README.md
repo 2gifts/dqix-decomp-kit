@@ -42,12 +42,13 @@ Initialise the kit:
 The kit is updated continuously. Start every session with `python kit_update.py`; agents are told to
 in `AGENTS.md`.
 
-Your attempts, logs and staged matches live inside the kit directory as git-ignored files. Never run
-`git clean -x`, `git reset --hard` or `git checkout -f` in it.
+The checkout holds code only. Your attempts, logs, claims and staged matches live in a separate
+state directory, `../dqix-kit-state` by default (`python kit_init.py --state <dir>` to put it
+elsewhere), so no git command run in the checkout can touch them.
 
 Match one function. Module is `main` or a 3-digit overlay; addresses are 8 hex digits without `0x`.
 
-    export SP="$(pwd -W 2>/dev/null || pwd)"
+    export KIT="$(pwd -W 2>/dev/null || pwd)" SP="$(python kitpaths.py state)"
     python claim.py 017 --peek 5                    # next candidates in overlay 017; claims nothing
     A=021bb1a4                                      # one of them
     F="$SP/wip/ov017/$A.cpp"; mkdir -p "$SP/wip/ov017" "$SP/staging/ov017"
@@ -86,7 +87,7 @@ explains every step.
 | `OPEN_RESIDUES.md` `REGALLOC_FINDINGS.md` `inv/*_FINDINGS.md` | recorded findings |
 | `.claude/skills/` `.claude/workflows/` | Claude Code skills and workflows |
 
-`kit_init.py` creates the state directories: `wip/`, `staging/`, `handwork/`, `wlog/`, `gated/`,
+`kit_init.py` creates, under the state directory, `wip/`, `staging/`, `handwork/`, `wlog/`, `gated/`,
 `clsbest/`, `claims/`, `scaffold/`, `doc_cache/`, `attempts/`, `quarantine/`, `refs/`.
 
 ## Docs

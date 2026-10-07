@@ -22,7 +22,8 @@ import shutil
 import subprocess
 import sys
 
-SP = os.path.dirname(os.path.abspath(__file__))
+SP = _kp.SP
+KIT = _kp.KIT
 REPO = _kp.REPO
 APPLY = "--apply" in sys.argv
 

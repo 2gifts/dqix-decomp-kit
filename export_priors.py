@@ -21,6 +21,7 @@ import kitpaths
 import resumable
 
 SP = kitpaths.SP
+KIT = kitpaths.KIT
 REPO = kitpaths.REPO
 ADDR = re.compile(r"(0[0-9a-fA-F]{7})")
 WRONG_LENGTH = {"OVERGEN", "UNDERGEN", "SIZE"}
@@ -30,7 +31,7 @@ UNUSABLE = {"NO-COMPILE", "PRAGMA", "BAD-NAME", "ALREADY-COMMITTED", "UNKNOWN"}
 def candidates(src):
     pats = resumable.POOLS + ["clsbest/*.cpp", "wip/*/*.cpp"]
     files = [f for p in pats for f in glob.glob(f"{src}/{p}")]
-    files += glob.glob(f"{SP}/priors/*/*.cpp")
+    files += glob.glob(f"{KIT}/priors/*/*.cpp")
     by = {}
     for f in files:
         f = f.replace("\\", "/")
@@ -58,7 +59,7 @@ def module_of(f, addr):
 
 def gate(mod, addr, f):
     try:
-        out = subprocess.run([sys.executable, f"{SP}/wgate.py", mod, addr, f], cwd=REPO,
+        out = subprocess.run([sys.executable, f"{KIT}/wgate.py", mod, addr, f], cwd=REPO,
                              capture_output=True, text=True, timeout=300).stdout
     except subprocess.TimeoutExpired:
         return (9, 0, "TIMEOUT", 0)
@@ -100,7 +101,7 @@ def main():
         for (mod, a), (score, f) in sorted(best.items()):
             print(f"{mod}\t{a}\t{score[2]}\t{score[3]}\t{f}")
         return
-    out = f"{SP}/priors"
+    out = f"{KIT}/priors"
     staged = f"{SP}/priors.new"
     shutil.rmtree(staged, ignore_errors=True)
     rows = []

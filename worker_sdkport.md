@@ -41,7 +41,7 @@ bytes. A previous sweep that did exactly that produced assembly for a game funct
 ## Per address
 
 ```
-python $SP/sdkident.py match main <addr>
+python $KIT/sdkident.py match main <addr>
 ```
 
 Prints our size, ISA and instruction count, then every reference implementation ranked by how much
@@ -56,7 +56,7 @@ of our instruction sequence it reproduces:
 Read the reference implementation with:
 
 ```
-python $SP/sdkident.py show <path-fragment> <ReferenceName>
+python $KIT/sdkident.py show <path-fragment> <ReferenceName>
 ```
 
 or just open the file under `$SP/refs/`. Read the header too — the reference project names the
@@ -88,14 +88,14 @@ directive syntax.
 ## Gate before you claim anything
 
 ```
-python $SP/wgate.py main <addr> $SP/staging/main/<Name>.cpp
+python $KIT/wgate.py main <addr> $SP/staging/main/<Name>.cpp
 ```
 
 `MATCH` on the last line is the only success. Anything else (`COMPILE`, `OVERGEN`, `BYTEDIFF@...`,
 `UNDEF-SYM`) means it is not matched yet. `wgate` masks relocation bytes exactly as the integrator
 does, so a `MATCH` is integrable.
 
-If it does not match, `python $SP/wdiff.py main <addr> <file>` shows only the diverging instructions.
+If it does not match, `python $KIT/wdiff.py main <addr> <file>` shows only the diverging instructions.
 
 **Delete any file that does not gate MATCH.** A non-matching file left in `staging/` gets integrated,
 fails the overlay checksum, and reds the wave for everyone.

@@ -7,7 +7,7 @@ import threading
 
 import frida
 
-sys.path.insert(0, (_kp.SP + "/frida"))
+sys.path.insert(0, (_kp.KIT + "/frida"))
 import schedforce as sf  # noqa: E402
 
 JS = r"""

@@ -27,7 +27,8 @@ import os
 import re
 import sys
 
-SP = os.path.dirname(os.path.abspath(__file__))
+SP = _kp.SP
+KIT = _kp.KIT
 REPO = _kp.REPO
 TSV = f"{SP}/wlog/blockers.tsv"
 NEVER = {"NO-ARTIFACT", "UNKNOWN", "MATCH", "ALREADY-COMMITTED"}
@@ -143,7 +144,7 @@ def verified_gap(mod, addr, path, cache):
     key = f"{path}|{st.st_size}|{int(st.st_mtime)}"
     if key in cache:
         return cache[key]
-    r = subprocess.run([sys.executable, f"{SP}/wgate.py", mod, addr, path],
+    r = subprocess.run([sys.executable, f"{KIT}/wgate.py", mod, addr, path],
                        capture_output=True, text=True, cwd=REPO)
     txt = r.stdout + r.stderr
     gap = 0 if re.search(r"(?m)^MATCH\b", txt) else None

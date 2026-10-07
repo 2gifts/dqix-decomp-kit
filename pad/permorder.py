@@ -21,14 +21,15 @@ import re
 import subprocess
 import sys
 
-SP = os.path.dirname(os.path.dirname(os.path.abspath(__file__))).replace(chr(92), "/")
+SP = _kp.SP
+KIT = _kp.KIT
 REPO = _kp.REPO
 
 
 def gate(mod, addr, path):
     env = dict(os.environ)
     env.pop("WGATE_SESSION", None)
-    r = subprocess.run([sys.executable, f"{SP}/wgate.py", mod, addr, path],
+    r = subprocess.run([sys.executable, f"{KIT}/wgate.py", mod, addr, path],
                        capture_output=True, text=True, cwd=REPO, env=env)
     for line in ((r.stdout or "") + (r.stderr or "")).splitlines():
         m = re.match(r"^(MATCH|RESIDUE \w+ -?\d+)", line)

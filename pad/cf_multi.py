@@ -5,7 +5,7 @@ import json
 import os
 import sys
 
-sys.path.insert(0, (_kp.SP + "/frida"))
+sys.path.insert(0, (_kp.KIT + "/frida"))
 import colorforce as cf  # noqa: E402
 
 OLD_ORDER = """  if (flipHere && CFG.kind === 'order' && CFG.pos + 1 < nodes.length) {"""

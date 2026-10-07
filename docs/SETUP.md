@@ -17,11 +17,14 @@ untested on anything but Windows.
 
     <parent>/
       dqix-decomp/        decomp checkout, branch decomp-matching     $DQIX_REPO
-      dqix-decomp-kit/    this kit                                    $SP
+      dqix-decomp-kit/    this kit: code, docs, skills only           $KIT
+      dqix-kit-state/     everything the pipeline produces            $SP
 
-`$SP` is the kit root. Every script derives it from its own location (`kitpaths.py`), so nothing has
-to be set. Keep both directories somewhere nothing cleans automatically (not `%TEMP%`, not the
-decomp's `build/`): the kit's state directories hold the only copy of attempts and matches.
+`kitpaths.py` resolves all three, so nothing has to be set. The state directory is `$DQIX_STATE`,
+else the path written in `$KIT/state.path` (`python kit_init.py --state <dir>` writes it), else
+`../dqix-kit-state`. It sits outside the checkout so that no git command run in the checkout can
+delete an attempt. Keep it somewhere nothing cleans automatically (not `%TEMP%`, not the decomp's
+`build/`): it holds the only copy of attempts and matches.
 
 ## The decomp checkout
 
@@ -84,6 +87,8 @@ It then creates the state directories, copies `OPEN_WORK.template.md` to `OPEN_W
 and runs `build_worker_docs.py`. It ends with `ready: run python selfcheck.py` or
 `not ready: fix the FAIL lines above` and exits non-zero on failure.
 
+All of these are under the state directory `$SP`, never under the checkout.
+
 | directory | holds |
 |---|---|
 | `wip/<main\|ovNNN>/` | sources being worked |
@@ -104,6 +109,8 @@ and runs `build_worker_docs.py`. It ends with `ready: run python selfcheck.py` o
 | variable | default | effect |
 |---|---|---|
 | `DQIX_REPO` | `../dqix-decomp` | the decomp checkout, for every script |
+| `DQIX_STATE` | `state.path`, else `../dqix-kit-state` | the state directory, for every script |
+| `DQIX_KIT` | the working directory | where skills and workflows find the checkout when the session runs elsewhere |
 | `CLAUDE_PROJECTS` | `~/.claude/projects` | where `evocap.py` and transcript readers find Claude Code sessions |
 | `MWCC` | the build's version | `<ver>/<sub>` picks another mwccarm build for `wgate.py`, `wdiff.py` and `pad/` tools; diagnosis only |
 | `WGATE_FLAGS`, `WDIFF_FLAGS` | none | extra compiler flags for one gate or diff; diagnosis only |

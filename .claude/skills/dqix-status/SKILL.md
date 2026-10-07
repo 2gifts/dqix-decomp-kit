@@ -8,17 +8,19 @@ description: Answer "where are we?" on the DQIX decomp — one command produces 
 The user is asking because they have not heard anything in a while. Give them movement and
 problems, not an inventory.
 
-    SP    the kit root: $DQIX_SP when set, else this session's working directory
+    KIT   the kit checkout (scripts, docs, skills): $DQIX_KIT when set, else this session's
+          working directory
+    SP    the state directory (attempts, logs, claims, staging): `python $KIT/kitpaths.py state`
     REPO  $DQIX_REPO, or ../dqix-decomp
 
 ## Get the data — one call
 
-    python $SP/progress.py --print
+    python $KIT/progress.py --print
 
 It rewrites `STATE.md` from disk — fleet counts, stop flags, coverage in bytes and functions,
 remaining work per size band, HEAD, staged-not-committed, selfcheck/regress, the last verdicts — and
 prints it. Give the delta against what the user was last told; never repeat unchanged numbers. Run
-`python $SP/bandcost.py` only if the user asks about money.
+`python $KIT/bandcost.py` only if the user asks about money.
 
 Everything comes from disk. Do not re-derive any of it with separate calls, and do not describe
 state from the conversation — a driver can have died since the last thing you said.

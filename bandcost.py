@@ -3,12 +3,16 @@
 Coverage is 79.99% by function but 37.68% by byte, so $/match flatters small functions by ~an order
 of magnitude. This prints both so a band decision is made on the metric that matches the goal.
 """
+import os as _kpos, sys as _kpsys
+_kpsys.path.insert(0, _kpos.path.dirname(_kpos.path.abspath(__file__)))
+import kitpaths as _kp
 import collections
 import glob
 import os
 import re
 
-SP = os.path.dirname(os.path.abspath(__file__))
+SP = _kp.SP
+KIT = _kp.KIT
 CLAIM = re.compile(r"claim ([0-9a-fA-F]{8}) (\d+)B")
 VERD = re.compile(r"\b(MATCH|miss) ([0-9a-fA-F]{8}) \$?([0-9.]+)")
 

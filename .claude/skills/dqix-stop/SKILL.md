@@ -10,14 +10,16 @@ explanation, and before any other tool call. Do not ask what to stop or whether 
 nothing here loses work: matched source stays on disk and every phase records its state in
 `$SP/wlog/`.
 
-    SP    the kit root: $DQIX_SP when set, else this session's working directory
+    KIT   the kit checkout (scripts, docs, skills): $DQIX_KIT when set, else this session's
+          working directory
+    SP    the state directory (attempts, logs, claims, staging): `python $KIT/kitpaths.py state`
     REPO  $DQIX_REPO, or ../dqix-decomp
 
 ## 1. Stop it
 
-    bash "$SP/fullstop.sh"          # spend stops now; CPU-only work is left to finish
-    bash "$SP/fullstop.sh" --hard   # also kill integration and sweeps
-    bash "$SP/fullstop.sh" --dry    # report both tiers, kill nothing
+    bash "$KIT/fullstop.sh"          # spend stops now; CPU-only work is left to finish
+    bash "$KIT/fullstop.sh" --hard   # also kill integration and sweeps
+    bash "$KIT/fullstop.sh" --dry    # report both tiers, kill nothing
 
 It sets `FLEET_STOPPED` / `STOP_PULL` / `STOP_RESUME` first, then works in two tiers:
 
@@ -63,7 +65,7 @@ otherwise look like drivers.
 Expect nothing. A stop is a **verified state, not a belief** — "I killed the fleet" has been wrong
 before, because a detached `claude.exe -p` survives a POSIX kill, gets reparented, and keeps
 spending with no driver collecting its output. If anything is still listed, run `bash
-"$SP/killfleet.sh" --all`, then check again.
+"$KIT/killfleet.sh" --all`, then check again.
 
 **`killfleet.sh --all` only became true on 2026-08-25.** It killed `run_all`/`run_overlay`/`run_main`
 — all retired on 2026-08-20 — and never `pull_all`/`pull_worker`, so the escalation this step tells

@@ -14,7 +14,7 @@ file that does not exist, nothing keys symbol lookups on the `func_` name, nothi
 
 | file | job |
 |---|---|
-| `kitpaths.py` | `SP` (this directory), `REPO` (`$DQIX_REPO`, default `../dqix-decomp`), `CLAUDE_PROJECTS` (`~/.claude/projects`); every script reads its paths here |
+| `kitpaths.py [kit\|state\|repo]` | `KIT` (this checkout: code only), `SP` (the state directory outside it: `$DQIX_STATE`, else `state.path`, else `../dqix-kit-state`), `REPO` (`$DQIX_REPO`, default `../dqix-decomp`), `CLAUDE_PROJECTS`; every script reads its paths here, shell scripts through the CLI |
 | `export_priors.py <source-sp> [-j N] [--dry-run]` | gate every saved attempt at an unmatched function in a pipeline directory's pools and keep the closest per address in `priors/<main\|ovNNN>/<addr>.cpp` + `priors/INDEX.tsv`; `resumable.py` reads `priors/` as a pool, so a fresh kit starts from the work already paid for |
 | `regress_fixtures/` | the prior sources `regress.py --slow` cracks end to end |
 | `kit_update.py` | fetch the published kit and fast-forward to it, print `RE-READ` for every changed agent instruction file, re-run `kit_init.py` (`--slow` when the gate or its tests changed); refuses while the fleet or an integration runs (exit 2) or while local changes or commits block a fast-forward (exit 3). `AGENTS.md` and the plan/continue/hand-match skills run it before any work |
@@ -424,7 +424,6 @@ but not in a baseline report)
 | `permute.py` | source permutation helper for the sweeps | |
 | `transweep.py` | gate `translate.py` output, rebind `Trans_<addr>` on WRONG-SYMBOL | |
 | `toolgripes.py` | mine worker verdicts for TOOL complaints | |
-| `verify_fixes.sh` | count observables so a patch that applied is not mistaken for one that worked | |
 | `integrate_all.sh` | run `finish_wave` for every module that has staged work, biggest backlog first | the per-module fallback `integrate_fast.sh` calls on a red combined build |
 | `resumable.py` | rank every unmatched address that already has a saved attempt; `skips()` is the verdict reservoir | reads `wlog/*.log`, so it depends on the rebuilt attempt history |
 | `poolsweep.py` | gate the .cpp left in ungathered scratch pools and stage the matches | written 2026-08-25; addresses read from the `// USA:` tag |

@@ -21,6 +21,7 @@ import glob, io, json, os, re, subprocess, sys, time, collections
 from datetime import datetime, timezone
 
 SP = _kp.SP
+KIT = _kp.KIT
 REPO = _kp.REPO
 HOURS = float(sys.argv[1]) if len(sys.argv) > 1 else 24
 ME = os.environ.get("AUTOTUNE_EXCLUDE_SESSION", "")

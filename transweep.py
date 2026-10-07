@@ -26,10 +26,11 @@ import re
 import subprocess
 import sys
 
-SP = os.path.dirname(os.path.abspath(__file__))
+SP = _kp.SP
+KIT = _kp.KIT
 REPO = _kp.REPO
 os.chdir(REPO)
-sys.path.insert(0, SP)
+sys.path.insert(0, KIT)
 
 _sh = sys.argv[sys.argv.index("--shard") + 1] if "--shard" in sys.argv else "1/1"
 SHARD, NSHARD = (int(_sh.split("/")[0]), int(_sh.split("/")[1])) if "/" in _sh else (1, 1)
@@ -37,7 +38,7 @@ LIMIT = int(sys.argv[sys.argv.index("--limit") + 1]) if "--limit" in sys.argv el
 REF_MIN = int(sys.argv[sys.argv.index("--refmin") + 1]) if "--refmin" in sys.argv else 1024
 TAG = "" if NSHARD == 1 else f"_{SHARD}of{NSHARD}"
 
-spec = importlib.util.spec_from_file_location("_t", f"{SP}/translate.py")
+spec = importlib.util.spec_from_file_location("_t", f"{KIT}/translate.py")
 T = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(T)
 
@@ -105,7 +106,7 @@ for n, (mod, addr, size) in enumerate(pool, 1):
         continue
     p = f"{work}/{mod}_{addr}.cpp"
     open(p, "w", encoding="utf-8", newline="\n").write(src)
-    r = subprocess.run([sys.executable, f"{SP}/wgate.py", mod, addr, p], capture_output=True,
+    r = subprocess.run([sys.executable, f"{KIT}/wgate.py", mod, addr, p], capture_output=True,
                        text=True, encoding="utf-8", errors="replace", cwd=REPO,
                        stdin=subprocess.DEVNULL)
     head = (((r.stdout or "") + (r.stderr or "")).strip().splitlines() or ["(none)"])[0]
@@ -125,7 +126,7 @@ for n, (mod, addr, size) in enumerate(pool, 1):
         if want:
             txt = src.replace(f"Trans_{addr}", want)
             open(p, "w", encoding="utf-8", newline="\n").write(txt)
-            r2 = subprocess.run([sys.executable, f"{SP}/wgate.py", mod, addr, p],
+            r2 = subprocess.run([sys.executable, f"{KIT}/wgate.py", mod, addr, p],
                                 capture_output=True, text=True, encoding="utf-8",
                                 errors="replace", cwd=REPO, stdin=subprocess.DEVNULL)
             if (((r2.stdout or "") + (r2.stderr or "")).strip().splitlines() or [""])[0].startswith("MATCH"):

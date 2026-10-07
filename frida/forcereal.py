@@ -8,7 +8,7 @@ import sys
 
 from elftools.elf.elffile import ELFFile
 
-sys.path.insert(0, (_kp.SP + "/frida"))
+sys.path.insert(0, (_kp.KIT + "/frida"))
 import forcenoalias  # noqa: E402
 
 REPO = _kp.REPO
@@ -43,7 +43,7 @@ if __name__ == "__main__":
     name, mode = sys.argv[1], sys.argv[2]
     src, addr, size = TARGETS[name]
     mod = name[:5]
-    obj = (_kp.SP + "/frida/real_%s_%s.o") % (name, mode)
+    obj = (_kp.KIT + "/frida/real_%s_%s.o") % (name, mode)
     forcenoalias.run(src, mode, obj)
     n, ours = words(obj, size)
     R = rom(mod, addr, size)
