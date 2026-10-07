@@ -19,7 +19,7 @@ KIT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && { pwd -W 2>/dev/null || pwd; })"
 SP="$(python "$KIT/kitpaths.py" state)"
 REPO="$(python "$KIT/kitpaths.py" repo)"
 LOG="$SP/wlog/pull_all.log"
-INTEGRATE_EVERY=${INTEGRATE_EVERY:-1800}      # seconds between integration passes
+INTEGRATE_EVERY=${INTEGRATE_EVERY:-600}      # seconds between integration passes
 # THE FREE SWEEP HAS TO RUN BY ITSELF. repairsweep re-gates every parked source and stages what a
 # new colorsweep rule now closes -- 111 of 369 parked files turned out to be finished matches the
 # one time it was run over the whole pool. Nothing has launched it automatically since run_all.sh
@@ -48,7 +48,6 @@ declare -A slot_pid
 last_integrate=$SECONDS
 last_sweep=$SECONDS
 last_state=0                      # 0, not $SECONDS: write STATE.md on the very first loop
-last_integ_mod=""
 sweep_pid=""
 
 while :; do
@@ -139,29 +138,15 @@ while :; do
   if [ -z "$integ_pid" ] && { [ $((SECONDS - last_integrate)) -ge "$INTEGRATE_EVERY" ] \
        || [ "${_pending:-0}" -ge "${INTEGRATE_PENDING:-8}" ]; }; then
     last_integrate=$SECONDS
-    # Pick the module with the MOST staged work, so each expensive rebuild lands as much as possible.
-    # Selecting by "has untracked files in src/" also stopped working when workers moved to staging.
     _mods=$(ls -d "$SP"/staging/*/ 2>/dev/null \
             | while read -r d; do echo "$(ls "$d"*.cpp 2>/dev/null | wc -l) $(basename "$d")"; done \
             | sort -rn | awk '$1>0{print $2}' | sed 's/^ov//')
-    # TAKE TURNS. Highest-staged-first alone is a starvation trap: a module that CANNOT commit keeps
-    # its staged files, keeps the highest count, and wins every pass forever. main did exactly that
-    # on 2026-09-09 -- four consecutive `committed 0` passes while ov011/ov013/ov027/ov030 each held
-    # a proven match and never got a turn. Sending last pass's module to the back of the list bounds
-    # the wait at one pass and still lands the biggest batch among the rest.
-    if [ -n "$last_integ_mod" ]; then
-      _mods="$(printf '%s\n' $_mods | grep -vx "$last_integ_mod") $(printf '%s\n' $_mods | grep -x "$last_integ_mod")"
+    if [ -n "$_mods" ]; then
+      mkdir -p "$SP/claims"; echo $_mods > "$SP/claims/INTEGRATING"
+      echo "$(date '+%H:%M') integrate $(echo $_mods) (detached, in the integration tree)" >> "$LOG"
+      bash "$KIT/integrate_all.sh" >> "$SP/wlog/pull_integrate.log" 2>&1 &
+      integ_pid=$!
     fi
-    for mod in $_mods; do
-      if true; then
-        mkdir -p "$SP/claims"; echo "$mod" > "$SP/claims/INTEGRATING"
-        last_integ_mod="$mod"
-        echo "$(date '+%H:%M') integrate $mod (detached; slots keep working other modules)" >> "$LOG"
-        bash "$KIT/finish_wave.sh" "$mod" >> "$SP/wlog/pull_integrate_${mod}.log" 2>&1 &
-        integ_pid=$!
-        break                      # one module at a time; finish_wave holds the wave lock anyway
-      fi
-    done
   fi
 
   # KEEP THE ADVANCE SWEEPER ALIVE. presweep_watch is a LOOP, not a pass: started once by hand it
