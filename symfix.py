@@ -21,6 +21,8 @@ import os
 import re
 import sys
 
+import buildcfg
+
 SP = _kp.SP
 KIT = _kp.KIT
 REPO = _kp.REPO
@@ -73,8 +75,8 @@ def demangle_params(enc):
 
 def committed_symbols():
     syms = {}
-    for p in [f"{REPO}/config/usa/arm9/symbols.txt"] + \
-            sorted(glob.glob(f"{REPO}/config/usa/arm9/overlays/*/symbols.txt")):
+    for p in [f"{REPO}/{buildcfg.config_dir('main')}/symbols.txt"] + \
+            sorted(glob.glob(f"{REPO}/{buildcfg.config_dir('main')}/overlays/*/symbols.txt")):
         for line in open(p, encoding="utf-8", errors="ignore"):
             m = re.match(r"(\S+)\s+kind:function\(", line)
             if m:
@@ -198,8 +200,8 @@ def fix_text(txt):
 
 
 def owner_of(addr):
-    for p in [f"{REPO}/config/usa/arm9/symbols.txt"] + \
-            sorted(glob.glob(f"{REPO}/config/usa/arm9/overlays/*/symbols.txt")):
+    for p in [f"{REPO}/{buildcfg.config_dir('main')}/symbols.txt"] + \
+            sorted(glob.glob(f"{REPO}/{buildcfg.config_dir('main')}/overlays/*/symbols.txt")):
         mod = "main" if "overlays" not in p else re.search(r"ov(\d+)", p).group(1)
         if re.search(r"addr:0x0*%s\b" % addr.lstrip("0"),
                      open(p, encoding="utf-8", errors="ignore").read()):

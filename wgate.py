@@ -80,13 +80,13 @@ if _pragmas:
 # "gate has no thumb support". One code path, parameterized — same rule as ov_recover.py.
 MAIN = (OV == "main")
 if MAIN:
-    CFG="config/usa/arm9"
-    PRISTINE=open("extract/usa/arm9/arm9.bin","rb").read()
+    CFG=buildcfg.config_dir("main")
+    PRISTINE=open(buildcfg.pristine("main"),"rb").read()
     PFX="func_"
     BASE=0x02000000
 else:
-    CFG=f"config/usa/arm9/overlays/ov{OV}"
-    PRISTINE=open(f"extract/usa/arm9_overlays/ov{OV}.bin","rb").read()
+    CFG=buildcfg.config_dir(OV)
+    PRISTINE=open(buildcfg.pristine(OV),"rb").read()
     PFX=f"func_ov{OV}_"
 symtxt=open(f"{CFG}/symbols.txt").read()
 delinks=open(f"{CFG}/delinks.txt").read()
@@ -95,7 +95,7 @@ if not MAIN:
     BASE=min(STARTS)
 import glob
 SYMSET=set(buildcfg.lcf_symbols())
-for _p in glob.glob("config/usa/arm9/**/symbols.txt", recursive=True):
+for _p in glob.glob(f"{buildcfg.config_dir('main')}/**/symbols.txt", recursive=True):
     for _l in open(_p):
         if ' kind:' in _l: SYMSET.add(_l.split()[0])
 _SESS = os.environ.get("WGATE_SESSION", "-")
@@ -256,7 +256,7 @@ if _want:
 # Conservative: fail ONLY on a confirmed mismatch; skip unresolvable symbols / thumb / blx / unknown
 # reloc types so a genuine match is never wrongly rejected.
 SYMADDR=buildcfg.lcf_symbols()
-for _p in glob.glob("config/usa/arm9/**/symbols.txt", recursive=True):
+for _p in glob.glob(f"{buildcfg.config_dir('main')}/**/symbols.txt", recursive=True):
     for _l in open(_p):
         _mm=re.match(r'(\S+)\s+kind:\w+[^\n]*?addr:0x([0-9a-f]+)', _l)
         if _mm: SYMADDR[_mm.group(1)]=int(_mm.group(2),16)

@@ -31,6 +31,8 @@ import subprocess
 import sys
 import time
 
+import buildcfg
+
 SP = _kp.SP
 KIT = _kp.KIT
 REPO = _kp.REPO
@@ -46,8 +48,7 @@ def claims_dir(mod):
 
 
 def cfg_for(mod):
-    return f"{REPO}/config/usa/arm9" if mod == "main" else \
-           f"{REPO}/config/usa/arm9/overlays/ov{mod}"
+    return f"{REPO}/{buildcfg.config_dir(mod)}"
 
 
 def skiplist():
@@ -397,7 +398,7 @@ def reap(d):
 
 
 def all_modules():
-    ov = f"{REPO}/config/usa/arm9/overlays"
+    ov = f"{REPO}/{buildcfg.config_dir('main')}/overlays"
     return ["main"] + [d[2:] for d in sorted(os.listdir(ov))] if os.path.isdir(ov) else ["main"]
 
 
