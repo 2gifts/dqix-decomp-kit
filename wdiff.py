@@ -54,13 +54,13 @@ def fail(msg):
 
 
 if OV == "main":
-    CFG = "config/usa/arm9"
-    PRISTINE = open("extract/usa/arm9/arm9.bin", "rb").read()
+    CFG = buildcfg.config_dir("main")
+    PRISTINE = open(buildcfg.pristine("main"), "rb").read()
     PFX = "func_"
     BASE = 0x02000000
 else:
-    CFG = f"config/usa/arm9/overlays/ov{OV}"
-    PRISTINE = open(f"extract/usa/arm9_overlays/ov{OV}.bin", "rb").read()
+    CFG = buildcfg.config_dir(OV)
+    PRISTINE = open(buildcfg.pristine(OV), "rb").read()
     PFX = f"func_ov{OV}_"
     BASE = min(int(m, 16) for m in
                re.findall(r'start:0x([0-9a-fA-F]+)', open(f"{CFG}/delinks.txt").read()))

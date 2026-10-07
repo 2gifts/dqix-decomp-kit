@@ -19,18 +19,19 @@ _kpsys.path.insert(0, _kpos.path.dirname(_kpos.path.abspath(__file__)))
 import kitpaths as _kp
 import re, sys, os, glob
 
+import buildcfg
 from capstone import Cs, CS_ARCH_ARM, CS_MODE_ARM, CS_MODE_THUMB
 
 REPO = _kp.REPO
 OV, ADDR = sys.argv[1], sys.argv[2]
 
 if OV == "main":
-    CFG = f"{REPO}/config/usa/arm9"
-    BLOB = open(f"{REPO}/extract/usa/arm9/arm9.bin", "rb").read()
+    CFG = f"{REPO}/{buildcfg.config_dir('main')}"
+    BLOB = open(f"{REPO}/{buildcfg.pristine('main')}", "rb").read()
     PFX, BASE = "func_", 0x02000000
 else:
-    CFG = f"{REPO}/config/usa/arm9/overlays/ov{OV}"
-    BLOB = open(f"{REPO}/extract/usa/arm9_overlays/ov{OV}.bin", "rb").read()
+    CFG = f"{REPO}/{buildcfg.config_dir(OV)}"
+    BLOB = open(f"{REPO}/{buildcfg.pristine(OV)}", "rb").read()
     PFX = f"func_ov{OV}_"
     BASE = min(int(m, 16) for m in
                re.findall(r'start:0x([0-9a-fA-F]+)', open(f"{CFG}/delinks.txt").read()))
@@ -70,7 +71,7 @@ for i in md.disasm(buf, a):
 SYMS = {}
 for _m in re.finditer(r'^(\S+) kind:(?:function|data)\([^)]*\) addr:0x([0-9a-fA-F]+)', sym, re.M):
     SYMS[int(_m.group(2), 16)] = _m.group(1)
-for _c in glob.glob(f"{REPO}/config/usa/arm9/symbols.txt") + glob.glob(f"{REPO}/config/usa/arm9/overlays/ov*/symbols.txt"):
+for _c in glob.glob(f"{REPO}/{buildcfg.config_dir('main')}/symbols.txt") + glob.glob(f"{REPO}/{buildcfg.config_dir('main')}/overlays/ov*/symbols.txt"):
     if _c.replace("\\", "/") == f"{CFG}/symbols.txt":
         continue
     for _m in re.finditer(r'^(\S+) kind:(?:function|data)\([^)]*\) addr:0x([0-9a-fA-F]+)',

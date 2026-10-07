@@ -11,12 +11,14 @@ import os
 import re
 import sys
 
+import buildcfg
+
 REPO = _kp.REPO
 SRC_RE = re.compile(r"(?m)^\s*(src/[^:\s]+\.(?:cpp|c))\s*:")
 
 
 def config_dir(mod):
-    return "config/usa/arm9" if mod == "main" else f"config/usa/arm9/overlays/ov{mod}"
+    return buildcfg.config_dir(mod)
 
 
 def for_module(mod):

@@ -23,12 +23,14 @@ _kpsys.path.insert(0, _kpos.path.dirname(_kpos.path.abspath(__file__)))
 import kitpaths as _kp
 import re, sys, os, glob, subprocess
 
+import buildcfg
+
 SP = _kp.SP
 KIT = _kp.KIT
 REPO = _kp.REPO
 
 SYMS, BOUNDS = {}, {}
-for p in glob.glob(f"{REPO}/config/usa/arm9/**/symbols.txt", recursive=True):
+for p in glob.glob(f"{REPO}/{buildcfg.config_dir('main')}/**/symbols.txt", recursive=True):
     ov = re.search(r'overlays[/\\]ov(\d+)', p)
     tag = f"overlay({int(ov.group(1))})" if ov else "main"
     table = SYMS.setdefault(tag, {})
@@ -65,7 +67,7 @@ def object_size(tag, addr):
 
 
 def cfg_of(mod):
-    return "config/usa/arm9" if mod == "main" else f"config/usa/arm9/overlays/ov{mod}"
+    return buildcfg.config_dir(mod)
 
 
 def scaffold(mod, addr):
@@ -176,7 +178,7 @@ if sys.argv[1] == "--all":
         if os.path.exists(q):
             skip |= {l.split()[0].lower() for l in open(q) if l.strip()}
     n = 0
-    for sy in glob.glob(f"{REPO}/config/usa/arm9/overlays/ov*/symbols.txt") + [f"{REPO}/config/usa/arm9/symbols.txt"]:
+    for sy in glob.glob(f"{REPO}/{buildcfg.config_dir('main')}/overlays/ov*/symbols.txt") + [f"{REPO}/{buildcfg.config_dir('main')}/symbols.txt"]:
         mod = "main" if sy.endswith("arm9/symbols.txt") else re.search(r'ov(\d+)', sy).group(1)
         dl = os.path.join(os.path.dirname(sy), "delinks.txt")
         rng = [(int(x, 16), int(y, 16)) for x, y in
