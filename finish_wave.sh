@@ -94,9 +94,36 @@ addr_of() {
 
 # 4. QUARANTINE untracked .cpp in THIS module whose addr is ALREADY committed (dupes cause collisions).
 git grep -hoE "// USA: ${TAGPRE}[0-9a-fA-F]{8}" HEAD -- src/ 2>/dev/null | grep -oE '[0-9a-fA-F]{8}$' | tr 'A-F' 'a-f' | sort -u > "$Q/.done_$OV"
+# BULK-TRACKED-BEGIN: one checked index snapshot, never per-file Git.
+mkdir -p "$SP/handwork" || { echo "FATAL: cannot create preflight scratch"; exit 6; }
+_tracked_tmp="$SP/handwork/fw_tracked_$$.nul"
+if ! git ls-files --cached -z -- "$SRCDIR/" > "$_tracked_tmp"; then
+  rm -f "$_tracked_tmp"
+  echo "FATAL: cannot read tracked paths; refusing duplicate quarantine"
+  exit 6
+fi
+# Check the complete read and record terminator before publishing any membership.
+# mapfile alone accepts an unterminated last record and may treat a read error as EOF.
+if ! python -c 'import pathlib,sys; d=pathlib.Path(sys.argv[1]).read_bytes(); sys.exit(0 if not d or d.endswith(bytes([0])) else 1)' "$_tracked_tmp"; then
+  rm -f "$_tracked_tmp"
+  echo "FATAL: unreadable or truncated tracked paths; refusing duplicate quarantine"
+  exit 6
+fi
+_fw_tracked_paths=()
+if ! mapfile -d '' -t _fw_tracked_paths < "$_tracked_tmp"; then
+  rm -f "$_tracked_tmp"
+  echo "FATAL: cannot load tracked paths; refusing duplicate quarantine"
+  exit 6
+fi
+declare -A _fw_tracked=()
+for _tracked_path in "${_fw_tracked_paths[@]}"; do
+  _fw_tracked["$_tracked_path"]=1
+done
+rm -f "$_tracked_tmp"
+# BULK-TRACKED-END
 for f in "$SRCDIR"/*.cpp; do
   [ -e "$f" ] || continue
-  git ls-files --error-unmatch "$f" >/dev/null 2>&1 && continue   # tracked committed file, leave it
+  [ -n "${_fw_tracked["$f"]+present}" ] && continue   # tracked: leave it
   a=$(addr_of "$f")
   [ -n "$a" ] && grep -qx "$a" "$Q/.done_$OV" && mv "$f" "$Q/$(basename "$f")" 2>/dev/null
 done
