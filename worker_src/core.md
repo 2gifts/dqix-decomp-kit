@@ -485,6 +485,16 @@ after a register argument's field load (`0219e384`):
 
     short GetId() const { short id = s4; return id; }      Call(c->GetId(), x, y, z, 0);
 
+**A REAL EXTERNAL GETTER CAN NEED A LOCAL INSIDE A NESTED NULL GUARD.** When the
+remaining difference is CMP operand order against an external getter return,
+test a normal scalar result local inside the existing pointer guard, followed by
+an inner comparison. Preserve return-width promotion, short circuiting and call
+count. On `02026bdc` (736B), the combined local/nested-guard form changed
+`cmp sb,r0` to `cmp r0,sb`: 2 -> MATCH, with the same 15 real calls. Reversing
+the compound equality alone was inert. This measured edit combines the local
+and guard split; neither is independently established as the cause. The earlier
+static-inline getter recipe above remains evidence for its own address.
+
 ### TWO STRUCT COPIES THE ROM INTERLEAVES — the destinations are in two stack objects
 The ROM forms both copies' source and destination addresses before the first `stm`; ours finishes
 the first copy before forming the second's (`0219e384`). Splitting the one frame struct in two, with
@@ -1108,6 +1118,14 @@ When the target RE-LOADS a value you are holding in a register:
 ## CONTROL-FLOW SHAPE — the lever for predication, tail-sharing, and branch order
 mwcc predicates small arms and cross-jumps shared tails. The SHAPE of the source decides both, and
 this family closed more large functions than any expression change:
+
+**AN EQUALITY RETURN CAN MAKE A DEFAULT INITIALIZER REDUNDANT.** If equal values
+return before two signed-order arms, prove that every remaining path assigns
+the result before removing its initializer. On `02041378` (248B), `distance = 0`
+added a CMP and MOV and emitted 256B. A bare declaration with the unchanged
+`current < target` / `target < current` arms restored MATCH248 under stock flags.
+Keep the equality return and both assignments; a partially assigned or
+fall-through local is not eligible for this rewrite.
 
 **A CONSTANT THE ROM ISSUES BEFORE AN ALU OP WAS NOT IN THAT BLOCK** (`021e3178`). The first-pass
 scheduler breaks ties by: critical-path slack, successors made ready, path height, then operand class
