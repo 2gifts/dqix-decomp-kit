@@ -140,6 +140,101 @@ def _scaffold_source_names():
     return None
 
 
+
+
+def repool_cpp_regression(repool_path, scratch_parent):
+    import importlib.util
+    from pathlib import Path
+    import subprocess
+    import tempfile
+
+    spec = importlib.util.spec_from_file_location('_repool_cpp_regression', repool_path)
+    repool = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(repool)
+    scratch_parent = Path(scratch_parent).resolve()
+    scratch_parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix='repool cpp ', dir=scratch_parent) as temporary:
+        repo = Path(temporary).resolve()
+        assert repo.parent == scratch_parent
+        config = repo/'config/usa/arm9'
+        includes = repo/'include'
+        config.mkdir(parents=True)
+        (includes/'GameState').mkdir(parents=True)
+        (includes/'Combat/Main').mkdir(parents=True)
+        old_names = ['_Z25GetCombatantWithFlag0x100P12BattleStructi',
+                     '_Z9OldHelperP12BattleStruct', '_Z10HeaderlessP12BattleStruct']
+        new_names = ['_Z25GetCombatantWithFlag0x100P9GameStatei',
+                     '_Z9NewHelperP9GameState', '_Z10HeaderlessP9GameState']
+
+        def symbols(names):
+            return ''.join(f'{name} kind:function(arm,size=0x4) addr:0x{0x02000000+4*i:08x}\n'
+                           for i, name in enumerate(names))
+
+        def git(*arguments):
+            result = subprocess.run(['git', '-C', str(repo), *arguments], capture_output=True,
+                                    text=True, timeout=15)
+            assert result.returncode == 0, result.stderr
+            return result.stdout.strip()
+
+        (config/'symbols.txt').write_text(symbols(old_names))
+        (includes/'GameState/GameState.h').write_text(
+            'struct BattleStruct { int value; };\n'
+            'struct CombatantStruct { int value; };\n'
+            'CombatantStruct* GetCombatantWithFlag0x100(BattleStruct* state, int id);\n'
+            'int OldHelper(BattleStruct* state);\n'
+            'int Headerless(BattleStruct* state);\n')
+        git('init', '-q')
+        git('add', '.')
+        git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid',
+            'commit', '-qm', 'old interfaces')
+        old_rev = git('rev-parse', 'HEAD')
+        (config/'symbols.txt').write_text(symbols(new_names))
+        (includes/'GameState/GameState.h').write_text('#include "Combat/Main/BattleList.h"\n')
+        (includes/'Combat/Main/BattleList.h').write_text(
+            'struct GameState;\nstruct GameObject;\n'
+            'GameObject* GetCombatantWithFlag0x100(GameState* state, int id);\n'
+            'int NewHelper(GameState* state);\n'
+            'int OldHelper(int unrelated);\n')
+        git('add', '.')
+        git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid',
+            'commit', '-qm', 'current interfaces')
+        repool.REPO = str(repo)
+        spell, protos, gone, moved, defs = repool.build(old_rev)
+        canonical = ('#include "GameState/GameState.h"\n'
+                     '// USA: func_02000020\n'
+                     'void Worker(GameState* state) { GetCombatantWithFlag0x100(state, 0); }\n')
+        repaired, what = repool.rewrite(canonical, True, spell, protos, gone, moved, defs)
+        assert repaired == canonical, 'canonical current C++ spelling was rewritten: ' + str(what)
+        assert 'GetCombatantWithFlag0x100' not in spell
+
+        # Direct old-mangled ABI repairs must remain available after suppressing a plain alias.
+        assert spell[old_names[0]] == new_names[0]
+        legacy = ('// USA: func_02000024\n'
+                  'void Legacy(BattleStruct* state) { ' + old_names[0] + '(state, 0); }\n')
+        repaired, what = repool.rewrite(legacy, True, spell, protos, gone, moved, defs)
+        assert repaired is not None and new_names[0] in repaired
+        assert 'extern "C" CombatantStruct* ' + new_names[0] in repaired
+        assert 'struct BattleStruct {' in repaired and 'struct CombatantStruct {' in repaired
+
+        # An unrelated current declaration must not protect a source name that really changed.
+        assert spell['OldHelper'] == new_names[1]
+        stale = '// USA: func_02000028\nvoid Stale(BattleStruct* state) { OldHelper(state); }\n'
+        repaired, what = repool.rewrite(stale, True, spell, protos, gone, moved, defs)
+        assert repaired is not None and new_names[1] in repaired and 'OldHelper(state)' not in repaired
+        # No current declaration: retain the original conservative migration behavior.
+        assert spell['Headerless'] == new_names[2]
+        return {'canonical_spelling_retained': True, 'transitive_current_header_fixture': True,
+                'old_mangled_abi_repair_retained': True, 'old_type_definitions_retained': True,
+                'genuinely_renamed_source_spelling_repaired': True,
+                'unbacked_spelling_still_migrates': True, 'compiler_invocations': 0}
+
+@check("repool retains current declared C++ spellings",
+       "GetCombatantWithFlag0x100 was converted to a mangled alias despite its current shared API")
+def _repool_current_cpp_names():
+    repool_cpp_regression(f"{KIT}/pad/repool.py", os.path.join(SP, "handwork"))
+    return None
+
+
 # ---------------------------------------------------------------- resumable.py
 
 @check("fullstop derives only script basenames from a checkout path with spaces",

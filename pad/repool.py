@@ -91,6 +91,8 @@ def definition(text, t):
 
 def build(rev):
     old, new = functions(rev), functions("HEAD")
+    oh, nh = headers(rev), headers("HEAD")
+    current_cpp = prototypes(nh.values())
     ren = {old[k]: new[k] for k in old if k in new and old[k] != new[k]}
     spell = dict(ren)
     byplain = {}
@@ -101,8 +103,9 @@ def build(rev):
     current = set(new.values())
     for p, ns in byplain.items():
         if len(ns) == 1 and p not in current:
-            spell.setdefault(p, next(iter(ns)))
-    oh, nh = headers(rev), headers("HEAD")
+            n = next(iter(ns))
+            if p not in current_cpp or plain(n) != p:
+                spell.setdefault(p, n)
     changed = [p for p in oh if oh[p] != nh.get(p)]
     protos = prototypes(oh[p] for p in changed)
     gone = type_names(oh[p] for p in changed) - type_names(nh.values())
