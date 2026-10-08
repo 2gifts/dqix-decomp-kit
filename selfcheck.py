@@ -255,10 +255,10 @@ def _repooled():
     R = il.module_from_spec(spec)
     spec.loader.exec_module(R)
     rev = read(f"{SP}/wlog/last_merge_base.txt").strip() or "a70058a0"
-    spell, protos, gone, moved, defs = R.build(rev)
+    spell, protos, gone, moved, defs, source_cpp = R.build(rev)
     stale = []
     for path, text in R.pool_files([]):
-        new, _what = R.rewrite(text, path.endswith(".cpp"), spell, protos, gone, moved, defs)
+        new, _what = R.rewrite(text, path.endswith(".cpp"), spell, protos, gone, moved, defs, source_cpp)
         if new is not None and new != text:
             stale.append(path)
     if stale:

@@ -244,9 +244,9 @@ def repool_cpp_regression(repool_path, scratch_parent):
         (includes/'GameState').mkdir(parents=True)
         (includes/'Combat/Main').mkdir(parents=True)
         old_names = ['_Z25GetCombatantWithFlag0x100P12BattleStructi',
-                     '_Z9OldHelperP12BattleStruct', '_Z10HeaderlessP12BattleStruct']
+                     '_Z9OldHelperP12BattleStruct', '_Z10HeaderlessP12BattleStruct', '_Z18GetField0x3b0ValueP12BattleStruct']
         new_names = ['_Z25GetCombatantWithFlag0x100P9GameStatei',
-                     '_Z9NewHelperP9GameState', '_Z10HeaderlessP9GameState']
+                     '_Z9NewHelperP9GameState', '_Z10HeaderlessP9GameState', '_Z18GetField0x3b0ValueP9GameState']
 
         def symbols(names):
             return ''.join(f'{name} kind:function(arm,size=0x4) addr:0x{0x02000000+4*i:08x}\n'
@@ -264,7 +264,8 @@ def repool_cpp_regression(repool_path, scratch_parent):
             'struct CombatantStruct { int value; };\n'
             'CombatantStruct* GetCombatantWithFlag0x100(BattleStruct* state, int id);\n'
             'int OldHelper(BattleStruct* state);\n'
-            'int Headerless(BattleStruct* state);\n')
+            'int Headerless(BattleStruct* state);\n'
+            'int GetField0x3b0Value(BattleStruct* state);\n')
         git('init', '-q')
         git('add', '.')
         git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid',
@@ -277,15 +278,34 @@ def repool_cpp_regression(repool_path, scratch_parent):
             'GameObject* GetCombatantWithFlag0x100(GameState* state, int id);\n'
             'int NewHelper(GameState* state);\n'
             'int OldHelper(int unrelated);\n')
+        source = repo/'src/Combat/Main'
+        source.mkdir(parents=True)
+        (config/'delinks.txt').write_text(
+            'src/Combat/Main/Getter.cpp:\n    complete\n    .text start:0x0200000c end:0x02000010\n'
+            'src/Combat/Main/Headerless.cpp:\n    complete\n    .text start:0x02000008 end:0x0200000c\n')
+        (source/'Getter.cpp').write_text(
+            '#include "GameState/GameState.h"\n// USA: func_0200000c\n'
+            'ARM int GetField0x3b0Value(GameState* state) { return *(int*)((char*)state + 0x3b0); }\n')
+        (source/'Headerless.cpp').write_text(
+            '// USA: func_02000008\n'
+            '// ARM int Headerless(GameState* fake) { return 0; }\n'
+            '/* ARM int Headerless(GameState* fake) { return 0; } */\n'
+            'const char* misleading = "ARM int Headerless(GameState* fake) {";\n'
+            'struct Misleading {\n ARM int Headerless(GameState* fake) { return 0; }\n};\n'
+            'extern "C" {\n ARM int Headerless(GameState* fake) { return 0; }\n}\n'
+            'ARM int Headerless(int unrelated) { return unrelated; }\n'
+            'ARM int Headerless(BattleStruct* stale) { return 0; }\n')
         git('add', '.')
         git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid',
             'commit', '-qm', 'current interfaces')
         repool.REPO = str(repo)
-        spell, protos, gone, moved, defs = repool.build(old_rev)
+        migration = repool.build(old_rev)
+        spell, protos, gone, moved, defs = migration[:5]
+        source_cpp = migration[5] if len(migration) == 6 else {}
         canonical = ('#include "GameState/GameState.h"\n'
                      '// USA: func_02000020\n'
                      'void Worker(GameState* state) { GetCombatantWithFlag0x100(state, 0); }\n')
-        repaired, what = repool.rewrite(canonical, True, spell, protos, gone, moved, defs)
+        repaired, what = repool.rewrite(canonical, True, *migration)
         assert repaired == canonical, 'canonical current C++ spelling was rewritten: ' + str(what)
         assert 'GetCombatantWithFlag0x100' not in spell
 
@@ -293,7 +313,7 @@ def repool_cpp_regression(repool_path, scratch_parent):
         assert spell[old_names[0]] == new_names[0]
         legacy = ('// USA: func_02000024\n'
                   'void Legacy(BattleStruct* state) { ' + old_names[0] + '(state, 0); }\n')
-        repaired, what = repool.rewrite(legacy, True, spell, protos, gone, moved, defs)
+        repaired, what = repool.rewrite(legacy, True, *migration)
         assert repaired is not None and new_names[0] in repaired
         assert 'extern "C" CombatantStruct* ' + new_names[0] in repaired
         assert 'struct BattleStruct {' in repaired and 'struct CombatantStruct {' in repaired
@@ -301,14 +321,37 @@ def repool_cpp_regression(repool_path, scratch_parent):
         # An unrelated current declaration must not protect a source name that really changed.
         assert spell['OldHelper'] == new_names[1]
         stale = '// USA: func_02000028\nvoid Stale(BattleStruct* state) { OldHelper(state); }\n'
-        repaired, what = repool.rewrite(stale, True, spell, protos, gone, moved, defs)
+        repaired, what = repool.rewrite(stale, True, *migration)
         assert repaired is not None and new_names[1] in repaired and 'OldHelper(state)' not in repaired
         # No current declaration: retain the original conservative migration behavior.
         assert spell['Headerless'] == new_names[2]
+        # Source-only guard: the actual complete owner matches the current encoded nominal ABI.
+        source_canonical = ('// USA: func_02000030\n'
+                            'int GetField0x3b0Value(GameState* state);\n'
+                            'void Canonical(GameState* state) { GetField0x3b0Value(state); }\n')
+        repaired, what = repool.rewrite(source_canonical, True, *migration)
+        assert repaired == source_canonical, 'source-backed canonical signature was rewritten: ' + str(what)
+        assert source_cpp == {'GetField0x3b0Value': new_names[3]}, source_cpp
+        facade = source_canonical.replace('GameState*', 'BattleStruct*')
+        repaired, what = repool.rewrite(facade, True, *migration)
+        assert repaired is not None and new_names[3] in repaired, 'old nominal facade masked migration'
+        overload = source_canonical.replace('GameState*', 'int')
+        repaired, what = repool.rewrite(overload, True, *migration)
+        assert repaired is not None and new_names[3] in repaired, 'unrelated overload masked migration'
+        mixed = source_canonical.replace('int GetField0x3b0Value(GameState* state);',
+                                        'int GetField0x3b0Value(GameState* state);\nint GetField0x3b0Value(int unrelated);')
+        repaired, what = repool.rewrite(mixed, True, *migration)
+        assert repaired is not None and new_names[3] in repaired, 'mixed overload set masked migration'
+        explicit = '// USA: func_02000034\nvoid Explicit(BattleStruct* state) { ' + old_names[3] + '(state); }\n'
+        repaired, what = repool.rewrite(explicit, True, *migration)
+        assert repaired is not None and new_names[3] in repaired, 'source guard disabled old-mangled repairs'
         return {'canonical_spelling_retained': True, 'transitive_current_header_fixture': True,
                 'old_mangled_abi_repair_retained': True, 'old_type_definitions_retained': True,
                 'genuinely_renamed_source_spelling_repaired': True,
-                'unbacked_spelling_still_migrates': True, 'compiler_invocations': 0}
+                'unbacked_spelling_still_migrates': True, 'source_backed_nominal_guard': True,
+                'source_comments_strings_overloads_not_canonical': True, 'old_nominal_facade_migrates': True,
+                'nested_class_C_linkage_and_mixed_overloads_not_canonical': True,
+                'compiler_invocations': 0}
 
 @check("repool retains current declared C++ spellings",
        "GetCombatantWithFlag0x100 was converted to a mangled alias despite its current shared API")

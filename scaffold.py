@@ -228,7 +228,7 @@ def scaffold(mod, addr):
     return '\n'.join(L) + '\n', len(calls) + len(data)
 
 
-if sys.argv[1] == "--all":
+if __name__ == "__main__" and sys.argv[1] == "--all":
     # EVERY remaining function, not just this wave's. Two reasons:
     #  1. the point is to grow how much is done AUTOMATICALLY — each improvement to infer.py/synth.py
     #     should reach the whole pool, not the 9 addrs that happen to be in flight;
@@ -262,7 +262,7 @@ if sys.argv[1] == "--all":
                 if n % 250 == 0:
                     print(f"  {n}...", flush=True)
     print(f"scaffolded {n} remaining functions -> {out}/")
-elif sys.argv[1] == "--wave":
+elif __name__ == "__main__" and sys.argv[1] == "--wave":
     mod = sys.argv[2]
     d = f"{SP}/wave_main" if mod == "main" else f"{SP}/wave_ov{mod}"
     out = f"{SP}/scaffold"; os.makedirs(out, exist_ok=True)
@@ -276,7 +276,7 @@ elif sys.argv[1] == "--wave":
             if r:
                 open(f"{out}/{ad}.cpp", 'w', encoding='utf-8').write(r[0]); n += 1
     print(f"scaffolded {n} functions -> {out}/")
-else:
+elif __name__ == "__main__":
     mod, addr = sys.argv[1], sys.argv[2]
     r = scaffold(mod, addr)
     if not r:

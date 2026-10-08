@@ -18,8 +18,8 @@ SYM = re.compile(r"(\S+) kind:(\w+)\S* addr:0x([0-9a-fA-F]{8})")
 TAG = re.compile(r"\s*//\s*(?:SCRATCH-)?USA:")
 KEYWORD = {"return", "if", "while", "for", "switch", "else", "do", "case", "sizeof", "goto"}
 BUILTIN = {"unsigned", "signed", "char", "short", "int", "long", "void", "float", "double", "bool"}
-DECL = re.compile(r"^\s*(?:extern\s+\"C\"\s+)?(?:static\s+|inline\s+)*"
-                  r"([A-Za-z_][\w\s\*&:<>]*?[\s\*&])([A-Za-z_]\w*)\s*\(([^;{}]*)\)\s*;")
+DECL = re.compile(r"^\s*(?:extern\s+(?:\"C\"\s+)?)?(?:static\s+|inline\s+)*"
+                  r"([A-Za-z_][\w\s\*&:<>]*?[\s\*&])([A-Za-z_]\w*)\s*\(([^;{}]*)\)\s*([;{])")
 
 
 def git(*args):
@@ -61,13 +61,106 @@ def type_names(texts):
     return names
 
 
+def signatures(text, top_level_only=False):
+    """Use the shared lexical filter for declarations and ordinary flat definitions."""
+    from scaffold import _code_without_comments
+    in_block = False
+    depth = 0
+    for raw in text.splitlines():
+        code, in_block = _code_without_comments(raw, in_block)
+        match = DECL.match(code)
+        if match and (not top_level_only or depth == 0) and match.group(1).strip().split()[-1].strip("*&") not in KEYWORD:
+            yield (match.group(1).strip(), match.group(2), match.group(3).strip(),
+                   match.group(4), not re.search(r'\bextern\s+"C"', raw))
+        depth += code.count("{") - code.count("}")
+
+
+def matches_cpp_parameters(parameters, symbol):
+    """Fail closed on unsupported encodings/types; use the shared mangled decoder."""
+    from symfix import demangle_params, split_args
+    encoded = re.fullmatch(r"_Z(\d+)(.+)", symbol)
+    if not encoded:
+        return False
+    length = int(encoded.group(1))
+    try:
+        expected = demangle_params(encoded.group(2)[length:])
+    except (ValueError, IndexError):
+        return False
+    supplied = split_args(parameters)
+    if supplied == ["void"]:
+        supplied = []
+    if len(supplied) != len(expected):
+        return False
+    for actual, wanted in zip(supplied, expected):
+        if re.search(r"[=()<>\[\].]", actual):
+            return False
+        tokens = lambda text: re.findall(r"[A-Za-z_]\w*|[^\s]", re.sub(r"\b(?:struct|class)\s+", "", text))
+        a, w = tokens(actual), tokens(wanted)
+        if a != w and not (a[:-1] == w and re.fullmatch(r"[A-Za-z_]\w*", a[-1])):
+            return False
+    return True
+
+
+def canonical_declaration(text, name, symbol):
+    declarations = [row for row in signatures(text, top_level_only=True) if row[1] == name and row[3] == ";"]
+    return bool(declarations) and all(row[4] and matches_cpp_parameters(row[2], symbol) for row in declarations)
+
+
+def source_cpp_bindings(rev, current, candidates):
+    """Prove only configured flat signatures in complete current source owners, in two batches."""
+    import io
+    import tarfile
+    from union_merge import parse_delinks, block_range
+
+    def archive(paths):
+        result = subprocess.run(["git", "-C", REPO, "archive", rev, "--", *sorted(paths)], capture_output=True)
+        if result.returncode:
+            raise RuntimeError(result.stderr.decode("utf-8", errors="replace"))
+        with tarfile.open(fileobj=io.BytesIO(result.stdout)) as packed:
+            return {member.name: packed.extractfile(member).read().decode("utf-8", errors="replace")
+                    for member in packed if member.isfile()}
+
+    if not candidates:
+        return {}
+    needed = [(module, address, symbol) for (module, address), symbol in current.items()
+              if candidates.get(plain(symbol)) == symbol]
+    owned = {}
+    for path, text in archive(["config/usa/arm9"]).items():
+        if not path.endswith("delinks.txt"):
+            continue
+        overlay = re.search(r"/ov(\d+)/", path)
+        module = overlay.group(1) if overlay else "main"
+        for owner, lines in parse_delinks(text)[1]:
+            bounds = block_range(lines)
+            if not owner.endswith(".cpp") or "complete" not in [line.strip() for line in lines] or not bounds:
+                continue
+            for slot, address, symbol in needed:
+                if slot == module and bounds[0] <= address < bounds[1]:
+                    owned.setdefault(owner, set()).add(symbol)
+    if not owned:
+        return {}
+    # Fail closed before an unusually large Windows argv; this is a narrow source probe.
+    if sum(len(path) + 1 for path in owned) > 16000:
+        return {}
+    proven = {}
+    for path, text in archive(owned).items():
+        # The shared line lexer does not evaluate preprocessors or multiline quoted tokens.
+        # Such files cannot certify a definition for this conservative spelling guard.
+        if re.search(r'\bR"|\\\r?\n|^\s*#\s*(?:if|ifdef|ifndef|elif|else|endif)\b', text, re.M):
+            continue
+        for return_type, name, parameters, ending, cpp in signatures(text, top_level_only=True):
+            if ending != "{" or not cpp or "static" in return_type.split():
+                continue
+            symbol = candidates.get(name)
+            if symbol in owned[path] and matches_cpp_parameters(parameters, symbol):
+                proven[name] = symbol
+    return proven
 def prototypes(texts):
     out = {}
-    for t in texts:
-        for line in t.splitlines():
-            m = DECL.match(line)
-            if m and m.group(1).strip().split()[-1].strip("*&") not in KEYWORD:
-                out.setdefault(m.group(2), (m.group(1).strip(), m.group(3).strip()))
+    for text in texts:
+        for return_type, name, parameters, ending, cpp in signatures(text):
+            if ending == ";":
+                out.setdefault(name, (return_type, parameters))
     return out
 
 
@@ -100,6 +193,9 @@ def build(rev):
         p = plain(o)
         if p and p != o:
             byplain.setdefault(p, set()).add(n)
+    source_candidates = {p: next(iter(ns)) for p, ns in byplain.items()
+                         if len(ns) == 1 and plain(next(iter(ns))) == p}
+    source_cpp = source_cpp_bindings("HEAD", new, source_candidates)
     current = set(new.values())
     for p, ns in byplain.items():
         if len(ns) == 1 and p not in current:
@@ -120,7 +216,7 @@ def build(rev):
         f = line.split("\t")
         if f[0].startswith("R") and len(f) == 3:
             moved[f[1][len("include/"):]] = f[2][len("include/"):]
-    return spell, protos, gone, moved, defs
+    return spell, protos, gone, moved, defs, source_cpp
 
 
 def _declares(line, sym):
@@ -150,10 +246,15 @@ def insert_after_includes(text, block):
     return "\n".join(lines)
 
 
-def rewrite(text, cxx, spell, protos, gone, moved, defs):
+def rewrite(text, cxx, spell, protos, gone, moved, defs, source_cpp=None):
     orig = text
     for o, n in moved.items():
         text = re.sub(r'(#\s*include\s*[<"])%s([>"])' % re.escape(o), r"\g<1>%s\2" % n, text)
+    protected = {name for name, symbol in (source_cpp or {}).items()
+                 if cxx and canonical_declaration(text, name, symbol)}
+    spell = {old: new for old, new in spell.items() if old not in protected}
+    if not spell:
+        return text, ("includes" if text != orig else None)
     words = re.compile(r"\b(%s)\b" % "|".join(sorted(map(re.escape, spell), key=len, reverse=True)))
     defined = {w for w in set(words.findall(text))
                if re.search(r"^[ \t]*[A-Za-z_][\w \t\*&:<>]*?[ \t\*&]%s\s*\([^;{}()]*\)\s*(?:const\s*)?\{"
@@ -225,13 +326,13 @@ def main():
     ap.add_argument("--check", action="store_true")
     ap.add_argument("--exclude", default="")
     a = ap.parse_args()
-    spell, protos, gone, moved, defs = build(a.rev)
+    spell, protos, gone, moved, defs, source_cpp = build(a.rev)
     exclude = [x for x in a.exclude.split(",") if x]
     files = ([(p, open(p, encoding="utf-8", errors="ignore").read()) for p in a.paths]
              if a.paths else list(pool_files(exclude)))
     stats = Counter()
     for path, text in files:
-        new, what = rewrite(text, path.endswith(".cpp"), spell, protos, gone, moved, defs)
+        new, what = rewrite(text, path.endswith(".cpp"), spell, protos, gone, moved, defs, source_cpp)
         if new is None:
             stats["unfixable"] += 1
             print("SKIP  %s  %s" % (os.path.relpath(path, SP), what))
