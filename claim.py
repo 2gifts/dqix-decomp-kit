@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Atomically hand out ONE unmatched address to a worker. The pull half of pull-based dispatch.
 
-    python claim.py <main|NNN>            claim the next address, print it (empty = pool drained)
+    python claim.py <main|NNN>            claim the next address, print it (empty = pool drained;
+                                          exit 3 = the kit is behind, run kit_update.py first)
     python claim.py <mod> --release <ad>  put one back (worker died without a verdict)
     python claim.py <mod> --status        how many are claimed right now
 
@@ -510,6 +511,10 @@ def main():
         if subprocess.run([sys.executable, os.path.join(KIT, gate)],
                           capture_output=True).returncode != 0:
             return 0
+    stale = _kp.behind()
+    if stale and not _kp.busy():
+        print(_kp.stale_message(stale) + "; no new work is served until then", file=sys.stderr)
+        return 3
 
     reap(d)
     for addr in priority(mod) + unmatched(mod, cursor=band_cursor(mod, advance=True)):
