@@ -921,6 +921,20 @@ Two levers, in this order:
 - `unsigned short saved = f->x; f->x |= 0x4800;` instead of an int temp + cast stops the u16
   truncation sinking to the store (`02037934`).
 
+## STREAM HEADER ADVANCE AND ALIGNMENT EXPRESSION — preserve definition order
+For an indexed member-array read, bind a pointer to the member array first, then advance it by the
+index before dereferencing; `pointer = state->cells; pointer += index;` retains the member-offset
+addition before the indexed load (`main:02048e2c`). Keep a returned two-word position in the loop
+that consumes it when its copy stores matter. A const-reference adapter can materialize an integer
+conversion temporary, but its call must retain the authoritative helper's actual return type and
+pointer declaration; never redeclare a C-linkage symbol with a different C++ ABI to steer registers.
+
+For an entry header followed by a variable-size payload, advance the stream past the header before
+computing the payload size. Keep alignment as `(payloadSize + alignmentMask) & ~alignmentMask`
+instead of binding the complement to another local. The stream advance and complement's definition
+order determine scheduler and virtual-register ties (`main:02076738`); preserve these expressions
+when the residual is only the pointer-add/arithmetic and zero/complement ordering.
+
 ## CONSECUTIVE BITFIELD WRITES MERGE INTO ONE STORE — count the stores, not the writes
 For a run of N consecutive writes to the same bitfield STORAGE UNIT, mwcc emits N read-modify-write
 sequences and exactly **ONE** store. The merge is keyed on the resolved storage-unit address, not on
@@ -1348,6 +1362,18 @@ bare and then assigned — `Vec3i v; ... v = data;` — makes mwcc emit an out-o
 `_ZN5Vec3iaSERKS_` and call it; `-nodead` keeps that symbol, so the file can never match however
 good its byte count looks. Give the struct ONE ARRAY member (`struct Vec3i { int v[3]; };`) and the
 copy inlines to the ROM's `ldr [pc] / ldm / stm`.
+
+If the canonical class already has a genuine assignment body owned by another translation unit,
+declare its ordinary `operator=(const Class&)` in the real shared class and keep the ordinary
+field-copy definition in that existing owner. Do not replace a true project's named-member type
+with an invented array wrapper or a raw mangled alias. In `main:0201cb60`, the explicit canonical
+Vector3i assignment interface removes the extra28-byte weak export while preserving the existing
+820-byte Zone3D owner, all relocation targets and full USA checks.
+
+For a canonical dictionary lookup whose generic wrapper emits extra helpers, compose the existing
+typed getters and bind the caller's index before the loaded list. A shared NULL failure join can
+remove a materialized bool while preserving each original guard (`main:020b7990`,184→152→144 bytes).
+Keep the original later dereference and invalid-input assumptions; do not invent a graceful failure.
 
 ## DIVISION AND SMALL HELPERS
 - `% 3u` (unsigned) binds `_u32_div_f`; a signed modulo binds `_s32_div_f` (`0208a5d8`). An
