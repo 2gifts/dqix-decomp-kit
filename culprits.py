@@ -63,15 +63,17 @@ def name(log, cands=None):
     errors = "\n".join(l for l in log.splitlines() if "warning:" not in l)
     for path in SOURCE_ERROR.findall(errors):
         blame(by_stem.get(os.path.splitext(os.path.basename(path.replace("\\", "/")))[0].lower()), "compile")
+    linker = []
     for line in errors.splitlines():
         if line.lstrip().startswith(('"', "C:", "c:")) and " -o " in line:
             continue
         for stem in OBJECT.findall(line):
             blame(by_stem.get(stem.lower()), "link")
-        if "mwldarm" in line:
-            for symbol in re.findall(r'"([^"]+)"', line):
-                for addr in re.findall(r"([0-9a-fA-F]{8})(?![0-9a-fA-F])", symbol):
-                    blame(by_addr.get(addr.lower()), "symbol")
+        if "mwldarm.exe:" in line:
+            linker.append(line.split("mwldarm.exe:", 1)[1].strip())
+    for symbol in re.findall(r'"([^"]+)"', " ".join(linker)):
+        for addr in re.findall(r"([0-9a-fA-F]{8})(?![0-9a-fA-F])", symbol):
+            blame(by_addr.get(addr.lower()), "symbol")
     for path, num in CONFIG_LINE.findall(errors):
         try:
             text = open(os.path.join(REPO, path.replace("\\", "/")), encoding="utf-8", errors="ignore").read()

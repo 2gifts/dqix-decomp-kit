@@ -1740,8 +1740,8 @@ def _culprits_from_red_logs():
                     + mwld + "Previously defined in\n" + mwld + "func_ov028_021d9494.o\n",
         "0215d63c": "src\\Combat\\Overlay_0\\ProcessCombatTurn_0215d63c.cpp:726: undefined label 'L_0da4'\n",
         "021d4e38": mwld + "Linker command file error at line 10100\n" + mwld + "File not found: func_ov017_021d4e38.o\n",
-        "02043204": mwld + "Undefined :\n" + mwld + '"ReinitController02043204(MessageWork*)"\n'
-                    + mwld + 'Referenced from "Committed_02050000"\n' + mwld + "in Committed_02050000.o\n",
+        "02043204": mwld + "Undefined :\n" + mwld + '"ReinitController02043204(MessageWork*,\n' + mwld + 'int)"\n'
+                    + mwld + 'Referenced from\n' + mwld + '"Committed_02050000()" in\n' + mwld + "Committed_02050000.o\n",
     }
     for want, log in logs.items():
         got = [a for _m, a, _p, _w in c.name(log + mwld + 'warning: The name "Innocent_02000c9c" was reused\n', cands)]

@@ -718,6 +718,7 @@ def recurse(addrs):
         print(f"  drift-cull {len(cul)} {cul[:4]} -> re-gate {len(keep)}")
         recurse(keep)
         return
+    clean()
     mid = len(addrs) // 2
     recurse(addrs[:mid]); recurse(addrs[mid:])
 
