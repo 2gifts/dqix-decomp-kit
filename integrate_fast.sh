@@ -224,10 +224,12 @@ cp /tmp/if_check.log "$SP/wlog/if_check_$(date '+%m%d_%H%M').log" 2>/dev/null
 grep -aE "expected to be at|error:|ERROR|undefined|not found|FAILED" /tmp/if_check.log | tail -12 >> "$LOG"
 tail -5 /tmp/if_check.log >> "$LOG"
 _round=${INTEGRATE_FAST_ROUND:-0}
-if [ "$_round" -lt 3 ] && python "$KIT/culprits.py" /tmp/if_check.log --cull >> "$LOG" 2>&1; then
+_cul=1
+[ "$_round" -lt 3 ] && { python "$KIT/culprits.py" /tmp/if_check.log --cull >> "$LOG" 2>&1; _cul=$?; }
+if [ "$_cul" -eq 0 ] || [ "$_cul" -eq 2 ]; then
   git checkout -- config/ src/ >> "$LOG" 2>&1
   git clean -fdq src/ >> "$LOG" 2>&1
-  echo "$(date '+%H:%M') culled the culprits the log names to hold_<mod>; rebuilding the rest" | tee -a "$LOG"
+  echo "$(date '+%H:%M') red build: culprits culled or a tool crashed; rebuilding" | tee -a "$LOG"
   wave_lock_release
   INTEGRATE_FAST_ROUND=$((_round + 1)) exec bash "$KIT/integrate_fast.sh"
 fi

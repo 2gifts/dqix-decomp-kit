@@ -3,6 +3,8 @@
     python culprits.py <build-log>            print `<mod> <addr> <path> <reason>` per culprit
     python culprits.py <build-log> --cull     also move each culprit's staged copy to hold_<mod>
 
+Exit 0 = culprits named, 1 = none named, 2 = a tool crashed (retry the same set, blame nobody).
+
 Candidates are the untracked sources under the decomp's src/, keyed by their `// USA:` tag.
 """
 import glob
@@ -22,6 +24,13 @@ OBJECT = re.compile(r"([\w$]+)\.o\b")
 CONFIG_LINE = re.compile(r"(config[\\/]\S+?\.txt):(\d+):")
 DRIFT = re.compile(r"expected to be at 0x([0-9a-f]+) but is at 0x([0-9a-f]+)")
 HEX8 = re.compile(r"(?:addr:0x|start:0x|_)0*([0-9a-fA-F]{7,8})\b")
+
+
+CRASH = re.compile(r"\[code=(-\d+|\d{4,})\]|out of memory|not enough memory|Access violation", re.I)
+
+
+def transient(log):
+    return bool(CRASH.search(log))
 
 
 def tag_of(text):
@@ -110,7 +119,11 @@ def cull(named):
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         sys.exit(__doc__)
-    named = name(open(sys.argv[1], encoding="utf-8", errors="ignore").read())
+    log = open(sys.argv[1], encoding="utf-8", errors="ignore").read()
+    if transient(log):
+        print("transient: a tool crashed or ran out of memory; nothing blamed")
+        sys.exit(2)
+    named = name(log)
     for mod, addr, path, why in named:
         print(f"{mod} {addr} {path} {why}")
     if "--cull" in sys.argv[2:]:

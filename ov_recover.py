@@ -599,7 +599,7 @@ def prune_unwired():
 # reloc-false-matches (pass the masked per-func gate, FAIL the overlay checksum), the full set gates red
 # and naive bisection does O(N) gates = HOURS. Cap the gates/wave; beyond it, defer the remainder WITHOUT
 # striking (they weren't fairly isolated). Genuine matches beyond the cap just wait for the next wave.
-GATES=[0]; MAXGATES=int(os.environ.get("MAXGATES","16")); faildefer=[]; drifted=[]; named_bad=[]
+GATES=[0]; MAXGATES=int(os.environ.get("MAXGATES","16")); faildefer=[]; drifted=[]; named_bad=[]; RETRIED=[0]
 # When set, a single-func red gate defers WITHOUT recording a strike. Used for the drift pass, where the
 # candidates are already known byte-exact and reloc-verified — a red there is a link interaction, not a
 # bad match, and striking it would permanently write off good work.
@@ -689,6 +689,15 @@ def recurse(addrs):
             else:
                 mid = len(addrs) // 2; recurse(addrs[:mid]); recurse(addrs[mid:])
         return
+    try:
+        _log = open(f"{SP}/wlog/gate_{SUF}.txt", encoding='utf-8', errors='ignore').read()
+    except OSError:
+        _log = ""
+    if culprits.transient(_log) and RETRIED[0] < 2:
+        RETRIED[0] += 1; clean()
+        print(f"  transient tool failure -> re-gate {len(addrs)} unchanged")
+        recurse(addrs)
+        return
     if len(addrs) == 1:                       # gate red on a SINGLE func = definitively bad bytes when linked
         skipped.append(addrs[0]); clean()
         if NO_STRIKE[0]:
@@ -700,10 +709,6 @@ def recurse(addrs):
     # gate_culprits). Dropping them and re-gating costs 1 more build and saves the whole bisection.
     # The set strictly shrinks each time, so this cannot loop. Falls back to bisection if the log
     # names nothing (or blames everything), so no failure mode loses its old handling.
-    try:
-        _log = open(f"{SP}/wlog/gate_{SUF}.txt", encoding='utf-8', errors='ignore').read()
-    except OSError:
-        _log = ""
     blamed = {a: w for m, a, _p, w in culprits.name(_log) if m == ("main" if MAIN else OV) and a in addrs}
     named = sorted(blamed)
     if named:

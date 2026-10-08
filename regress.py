@@ -1753,6 +1753,9 @@ def _culprits_from_red_logs():
     shifted = "Symbol 'x' is expected to be at 0x021d4e38 but is at 0x021d4e40\n"
     if c.name(shifted, cands):
         return "a shifted symbol blamed its own function instead of falling back to the boundary scan"
+    crash = "FAILED: [code=3221225794] build/usa/src/Combat/Main/Innocent_02000c9c.o\n"
+    if not c.transient(crash) or c.transient(logs["0215d63c"] + "FAILED: [code=1] build/usa/arm9.o\n"):
+        return "a crashed tool was not told apart from a real compile or link failure"
 
 
 STAMP = f"{SP}/wlog/functional_stamp.txt"
