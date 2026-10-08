@@ -107,7 +107,10 @@ the user asks.
     `blocker.py` and what was ruled out in `deadends.md`. The dispatcher stops claiming until this is
     done. [docs/IMPROVEMENT_LOOP.md](docs/IMPROVEMENT_LOOP.md) has the whole loop.
 20. Reserve work with ONE open issue in the kit repository listing every address you are actively
-    working on, never one issue per function; skip addresses another open issue holds. Edit it as
-    the list changes. When the pull request is open, close the issue with a comment naming it
-    (`Landed in ZevyaDev/dqix-decomp#27`), then open a new issue for the next batch.
+    working on, never one issue per function. Edit it as the list changes. The moment you open the
+    pull request for those addresses, close the issue with a comment naming it
+    (`PR: ZevyaDev/dqix-decomp#27`); do not wait for the merge. Then open a new issue for the next
+    batch. An address is reserved only while it is listed in an open kit issue or changed by an open
+    pull request on ZevyaDev/dqix-decomp. An address in a closed issue with no pull request, and not
+    landed in `decomp-matching`, is free: its owner stopped or failed.
     [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) has the steps.

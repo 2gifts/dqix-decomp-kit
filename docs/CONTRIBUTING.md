@@ -9,16 +9,22 @@ Two repositories take contributions:
 
 ## Avoid duplicate work
 
-`claim.py` claims are local to one machine. Check the open issues in the kit repository first and
-skip every address someone holds. Then keep ONE open issue for everything you are actively working
-on, never one per function:
+`claim.py` claims are local to one machine. An address is reserved when it is:
 
-1. Open a single issue listing each address you are taking, one per line (`main 0205faf4`,
-   `ov017 021bb000-021bc000`).
+- listed in an OPEN issue in the kit repository, or
+- changed by an OPEN pull request on ZevyaDev/dqix-decomp.
+
+An address listed only in a CLOSED issue that has no pull request, and that is not landed in
+`decomp-matching`, is free: its owner stopped or failed. Take it.
+
+Keep ONE open issue for everything you are actively working on, never one per function:
+
+1. Skip every reserved address, then open a single issue listing each address you are taking, one
+   per line (`main 0205faf4`, `ov017 021bb000-021bc000`).
 2. Edit that issue as you add or drop addresses.
-3. When the work is done and its pull request is open, close the issue with a comment naming the
-   pull request (`Landed in ZevyaDev/dqix-decomp#27`). If you stop without a pull request, close it
-   saying so.
+3. The moment you open the pull request for those addresses, close the issue with a comment naming
+   it (`PR: ZevyaDev/dqix-decomp#27`). Do not wait for the merge; the open pull request now holds
+   the reservation. If you stop without a pull request, close the issue saying so.
 4. Open a new issue for the next batch.
 
 ## Matched functions
