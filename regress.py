@@ -1733,6 +1733,123 @@ def _classify_timer_rela():
     return None
 
 
+def _relative_byte_offset():
+    """The real fi/fd loader distinguishes a byte offset from an integer address sum."""
+    import struct
+    import buildcfg
+
+    if buildcfg.REGION != "usa":
+        return "the main:02042804 compiler fixture requires DQIX_REGION=usa"
+    source = open(f"{KIT}/regress_fixtures/RelativeByteOffset_02042804.cpp", encoding="utf-8").read()
+    pointer_sum = "reinterpret_cast<int>(base + header->entries[i].val)"
+    integer_sum = "reinterpret_cast<int>(base) + header->entries[i].val"
+    if source.count(pointer_sum) != 1:
+        return "the isolated relative-byte-offset expression is missing or ambiguous"
+    counterfactual = source.replace(pointer_sum, integer_sum)
+
+    repo = buildcfg.REPO
+    config = os.path.join(repo, buildcfg.config_dir("main"))
+    symbols = {}
+    for line in open(os.path.join(config, "symbols.txt"), encoding="utf-8"):
+        match = re.match(r"(\S+)\s+kind:\S+.*?addr:0x([0-9a-fA-F]+)", line)
+        if match:
+            symbols[match.group(1)] = int(match.group(2), 16)
+    delinks = open(os.path.join(config, "delinks.txt"), encoding="utf-8").read()
+    header = delinks.split("\n\n", 1)[0]
+    base = min(int(value, 16) for value in re.findall(r"start:0x([0-9a-fA-F]+)", header))
+    pristine = open(os.path.join(repo, buildcfg.pristine("main")), "rb").read()
+    address, size, export = 0x02042804, 320, "func_02042804"
+    target = pristine[address - base:address - base + size]
+    assert len(target) == size and symbols[export] == address, "fixture ROM slot changed"
+    # These are the actual ROM targets, not merely the fixture's undefined names.
+    expected = [
+        (0x20, 1, "__clear", 0x0200f374, -8),
+        (0x30, 1, "sprintf", 0x02003ce8, -8),
+        (0x48, 1, "_Z18LoadFileIntoMemoryPKcPvPj", 0x02075098, -8),
+        (0x5c, 1, "_ZN13SafeAllocator8AllocateEj", 0x02032544, -8),
+        (0x6c, 1, "memcpy", 0x02001a40, -8),
+        (0xcc, 1, "memset", 0x02001aac, -8),
+        (0xdc, 1, "sprintf", 0x02003ce8, -8),
+        (0xf4, 1, "_Z18LoadFileIntoMemoryPKcPvPj", 0x02075098, -8),
+        (0x108, 1, "_ZN13SafeAllocator8AllocateEj", 0x02032544, -8),
+        (0x118, 1, "memcpy", 0x02001a40, -8),
+        (0x134, 2, "data_020f0049", 0x020f0049, 0),
+        (0x138, 2, "data_0211e33c", 0x0211e33c, 0),
+        (0x13c, 2, "data_020f0061", 0x020f0061, 0),
+    ]
+
+    def linked_object(text):
+        elf = _compile_elf(text, repo)
+        assert not isinstance(elf, str), elf
+        table = elf.get_section_by_name(".symtab")
+        definitions = [symbol for symbol in table.iter_symbols()
+                       if symbol.name == export and isinstance(symbol["st_shndx"], int)]
+        assert len(definitions) == 1, "fixture must define its real bound symbol once"
+        definition = definitions[0]
+        assert definition["st_info"]["type"] == "STT_FUNC" and definition["st_info"]["bind"] == "STB_GLOBAL", "fixture lost its global function binding"
+        index = definition["st_shndx"]
+        section = elf.get_section(index)
+        allocated = [i for i, sec in enumerate(elf.iter_sections())
+                     if sec["sh_flags"] & 2 and sec["sh_size"]]
+        assert allocated == [index], "fixture gained an extra allocated section"
+        assert section.name == ".text" and section["sh_flags"] & 4, "export left executable text"
+        assert len(section.data()) == size, "fixture size changed"
+        assert definition["st_value"] == 0 and definition["st_size"] == size, "fixture export span changed"
+        exports = [symbol.name for symbol in table.iter_symbols()
+                   if symbol["st_info"]["bind"] in ("STB_GLOBAL", "STB_WEAK")
+                   and isinstance(symbol["st_shndx"], int)
+                   and elf.get_section(symbol["st_shndx"])["sh_flags"] & 2]
+        assert exports == [export], "fixture gained a runtime export"
+        undefined = {symbol.name for symbol in table.iter_symbols() if symbol["st_shndx"] == "SHN_UNDEF"}
+        undefined.discard("")
+        assert undefined == {row[2] for row in expected}, "fixture helper/data identities changed"
+        linked = bytearray(section.data())
+        relocations = []
+        seen = set()
+        for relsec in elf.iter_sections():
+            if relsec["sh_type"] not in ("SHT_REL", "SHT_RELA") or relsec["sh_info"] != index:
+                continue
+            relsymbols = elf.get_section(relsec["sh_link"])
+            for rr in relsec.iter_relocations():
+                assert rr.is_RELA(), "fixture lost its explicit RELA addends"
+                offset, kind = rr["r_offset"], rr["r_info_type"]
+                assert offset % 4 == 0 and 0 <= offset <= size - 4, "relocation is outside the export"
+                assert offset not in seen, "duplicate relocation site"
+                seen.add(offset)
+                name = relsymbols.get_symbol(rr["r_info_sym"]).name
+                value, addend = symbols[name], rr["r_addend"]
+                word = struct.unpack_from("<I", linked, offset)[0]
+                romword = struct.unpack_from("<I", target, offset)[0]
+                if kind == 1:
+                    assert word >> 24 == 0xeb and romword >> 24 == 0xeb, "PC24 site is not an ARM BL"
+                    immediate = romword & 0xffffff
+                    immediate -= 0x1000000 if immediate & 0x800000 else 0
+                    assert address + offset + 8 + immediate * 4 == value, "call target disagrees with ROM"
+                    displacement = value + addend - (address + offset)
+                    assert displacement % 4 == 0 and -(1 << 25) <= displacement < (1 << 25), "PC24 out of range"
+                    word = (word & 0xff000000) | ((displacement >> 2) & 0xffffff)
+                elif kind == 2:
+                    word = (value + addend) & 0xffffffff
+                    assert romword == word, "ABS32 target disagrees with ROM"
+                else:
+                    raise AssertionError("unexpected runtime relocation kind %s" % kind)
+                struct.pack_into("<I", linked, offset, word)
+                relocations.append((offset, kind, name, value, addend))
+        assert sorted(relocations) == expected, "fixture's 13 real relocation identities changed"
+        return {"linked": bytes(linked), "relocations": relocations, "section_index": index,
+                "exports": exports, "size": len(linked)}
+
+    positive = linked_object(source)
+    negative = linked_object(counterfactual)
+    assert positive["linked"] == target, "relative-byte-pointer fixture no longer matches all 320 ROM bytes"
+    assert positive["relocations"] == negative["relocations"], "counterfactual changed helper/data bindings"
+    differences = [offset for offset, (good, bad) in enumerate(zip(target, negative["linked"])) if good != bad]
+    assert differences == [0xa8, 0xaa], "integer-address counterfactual drifted: %s" % differences
+    assert struct.unpack_from("<I", positive["linked"], 0xa8)[0] == 0xe0802002, "ROM add operands changed"
+    assert struct.unpack_from("<I", negative["linked"], 0xa8)[0] == 0xe0822000, "negative is no longer the reversed integer add"
+    return None
+
+
 # ------------------------------------------------------- END-TO-END (slow, compiles)
 # The tests above pin what each rewrite RENDERS. They cannot tell you whether the sweep still
 # CRACKS a function: adding a rule enlarges the neighbourhood, so a winning path that used to fit
@@ -1814,6 +1931,9 @@ def run_functional():
     import subprocess
     import shutil
     import tempfile
+    check("relative file offsets retain the genuine byte-pointer ADD operands",
+          "main:02042804 is REGPERM2 with an integer address sum but MATCH320 with a char* "
+          "relative-offset addition; both forms must keep the same 13 real relocation targets")(_relative_byte_offset)
     bad = 0
     for module, addr, prior, expected, budget, what in FUNCTIONAL:
         src = os.path.join(KIT, prior)
@@ -1861,7 +1981,8 @@ def sweep_fingerprint():
     """Hash of everything that decides whether a crack still lands."""
     import hashlib
     h = hashlib.md5()
-    for p in ("colorsweep.py", "wdiff.py", "wgate.py"):
+    for p in ("colorsweep.py", "wdiff.py", "wgate.py",
+              "regress_fixtures/RelativeByteOffset_02042804.cpp"):
         try:
             h.update(open(f"{KIT}/{p}", "rb").read())
         except OSError:
