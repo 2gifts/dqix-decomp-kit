@@ -43,19 +43,56 @@ for p in glob.glob(f"{REPO}/{buildcfg.config_dir('main')}/**/symbols.txt", recur
         if os.path.exists(dl) else []
     BOUNDS[tag] = sorted(set(table) | set(ends))
 
+def _code_without_comments(line, in_block):
+    """Drop C++ comments and quoted text without joining surrounding tokens."""
+    parts, pos = [], 0
+    tokens = re.compile(r'//|/\*|"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'')
+    while pos < len(line):
+        if in_block:
+            close = line.find("*/", pos)
+            if close < 0:
+                break
+            pos, in_block = close + 2, False
+            continue
+        token = tokens.search(line, pos)
+        if token is None:
+            parts.append(line[pos:])
+            break
+        parts.append(line[pos:token.start()])
+        if token.group() == "//":
+            break
+        parts.append(" ")
+        if token.group() == "/*":
+            in_block = True
+        pos = token.end()
+    return "".join(parts), in_block
+
+
+def c_names_from_grep(output):
+    """Resolve declarations only inside the USA tag's git-grep context group."""
+    names, cur, in_block = {}, None, False
+    for line in output.splitlines():
+        if line.strip() == "--":
+            cur, in_block = None, False
+            continue
+        tag = re.match(r'\s*// USA: func_(?:ov(\d+)_)?([0-9a-fA-F]{8})', line) if not in_block else None
+        if tag:
+            cur = (f"overlay({int(tag.group(1))})" if tag.group(1) else "main", int(tag.group(2), 16))
+            continue
+        code, in_block = _code_without_comments(line, in_block)
+        if cur is not None:
+            found = re.search(r'\b([A-Za-z_]\w*)\s*\(', code)
+            if found and found.group(1) not in ('if', 'for', 'while', 'switch', 'return'):
+                names[cur] = found.group(1)
+                cur = None
+    return names
+
+
 CNAME = {}
 try:
     out = subprocess.run(["git", "grep", "-h", "-A2", "-E", r"// USA: func_(ov[0-9]+_)?[0-9a-fA-F]{8}"],
                          cwd=REPO, capture_output=True, text=True).stdout
-    cur = None
-    for l in out.split('\n'):
-        m = re.search(r'// USA: func_(?:ov(\d+)_)?([0-9a-fA-F]{8})', l)
-        if m:
-            cur = (f"overlay({int(m.group(1))})" if m.group(1) else "main", int(m.group(2), 16)); continue
-        if cur is not None:
-            f = re.search(r'\b([A-Za-z_]\w*)\s*\(', l)
-            if f and f.group(1) not in ('if', 'for', 'while', 'switch', 'return'):
-                CNAME[cur] = f.group(1); cur = None
+    CNAME = c_names_from_grep(out)
 except Exception:
     pass
 

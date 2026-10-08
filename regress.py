@@ -55,6 +55,90 @@ def load(mod):
     return m
 
 
+def scaffold_name_regression(scaffold_path, kit_dir, scratch_parent):
+    import ast
+    import os
+    from pathlib import Path
+    import re
+    import subprocess
+    import sys
+    import tempfile
+
+    scaffold_path, kit_dir, scratch_parent = map(Path, (scaffold_path, kit_dir, scratch_parent))
+    scratch_parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix='scaffold names ', dir=scratch_parent) as temporary:
+        root = Path(temporary).resolve()
+        assert root.parent == scratch_parent.resolve()  # validate the cleanup target before writes
+        repo, state = root/'repo with spaces', root/'external state'
+        config = repo/'config/usa/arm9'
+        source_dir = repo/'src/Combat/Main'
+        for directory in (config, source_dir, repo/'tools', state):
+            directory.mkdir(parents=True, exist_ok=True)
+        (repo/'tools/configure.py').write_text('MWCC_VERSION="fixture"\nDECOMP_ME_COMPILER="fixture"\n'
+                'CC_FLAGS=""\nCC_INCLUDES=""\nAS_FLAGS=""\nregion_defines="-d usa"\n')
+        (config/'symbols.txt').write_text(
+            'sprintf kind:function(arm,size=0x2c) addr:0x02003ce8\n'
+            'func_02067f5c kind:function(arm,size=0x40) addr:0x02067f5c\n'
+            'func_0206819c kind:function(arm,size=0x64) addr:0x0206819c\n')
+        (config/'delinks.txt').write_text('')
+        (config/'relocs.txt').write_text(
+            'from:0x020681b8 kind:arm_call to:0x02003ce8 module:main\n'
+            'from:0x020681f8 kind:arm_call to:0x02067f5c module:main\n')
+        # The actual three-line git grep -A2 window from the committed sprintf owner.
+        (source_dir/'sprintf.cpp').write_text(
+            '// USA: func_02003ce8\n'
+            '// The `...` makes mwccarm home r0-r3 on entry; the argument list then starts one\n'
+            '// word past the (word-aligned) address of `fmt`, which is what the ROM computes.\n'
+            'extern "C" ARM int sprintf(char* buffer, const char* format, ...) {}\n')
+        # A genuine nearby definition must still supply its source name.
+        (source_dir/'ToUpperBounded.cpp').write_text(
+            '// USA: func_02067f5c\nARM void ToUpperBounded(signed char* s, int count) {}\n')
+        for command in (['git','init','-q'], ['git','add','src']):
+            result = subprocess.run(command, cwd=repo, capture_output=True, text=True, timeout=15)
+            assert result.returncode == 0, result.stderr
+        environment = dict(os.environ, DQIX_KIT=str(kit_dir), DQIX_REPO=str(repo),
+                           DQIX_STATE=str(state), DQIX_REGION='usa')
+        environment['PYTHONPATH'] = str(kit_dir) + os.pathsep + environment.get('PYTHONPATH','')
+        result = subprocess.run([sys.executable,str(scaffold_path),'main','0206819c'],
+                cwd=repo, env=environment, capture_output=True, text=True, timeout=30)
+        assert result.returncode == 0, result.stderr
+        generated = result.stdout
+        assert 'extern "C" void sprintf();' in generated, 'actual generated declaration lost authoritative sprintf'
+        assert re.search(r'\+0x1c\s+sprintf\b',generated), 'actual generated call map lost sprintf'
+        assert 'extern "C" void the();' not in generated, 'comment supplied a fake function name'
+        assert 'extern "C" void ToUpperBounded();' in generated, 'genuine definition no longer resolves'
+        assert re.search(r'\+0x5c\s+ToUpperBounded\b',generated), 'genuine definition missing from call map'
+
+    # Execute the production parser functions, not a second implementation of the fix.
+    tree = ast.parse(scaffold_path.read_text())
+    functions = [node for node in tree.body if isinstance(node, ast.FunctionDef)
+                 and node.name in ('_code_without_comments','c_names_from_grep')]
+    assert len(functions) == 2, 'shared CNAME parser functions missing'
+    namespace = {'re':re}
+    exec(compile(ast.Module(body=functions,type_ignores=[]),str(scaffold_path),'exec'),namespace)
+    parser = namespace['c_names_from_grep']
+    cases = [
+        ('line comment', '// USA: func_02000001\n// wrong (name)\nARM void Right() {}', {('main',0x02000001):'Right'}),
+        ('inline block comment', '// USA: func_02000002\n/* wrong (name) */ ARM void Real() {}', {('main',0x02000002):'Real'}),
+        ('multiline block comment', '// USA: func_02000003\n/* wrong (\nname) */ ARM void Multi() {}', {('main',0x02000003):'Multi'}),
+        ('grep group boundary', '// USA: func_02000004\n// unresolved\n--\nARM void Unrelated() {}', {}),
+        ('boundary resets block state', '// USA: func_02000005\n/* unresolved (\n--\n// USA: func_ov017_02100000\nARM void Overlay() {}', {('overlay(17)',0x02100000):'Overlay'}),
+        ('commented-out tag', '/*\n// USA: func_02000006\nWrong()\n*/\n--\n// USA: func_02000007\nARM void Actual() {}', {('main',0x02000007):'Actual'}),
+        ('quoted text is not a declaration', '// USA: func_02000008\nconst char* note="wrong ( // /*";\nextern "C" ARM void Quoted() {}', {('main',0x02000008):'Quoted'}),
+    ]
+    for name, text, expected in cases:
+        assert parser(text) == expected, (name,parser(text),expected)
+    return {'generated_declaration_and_call_map':'sprintf', 'real_definition':'ToUpperBounded',
+            'parser_cases':[name for name,_,_ in cases], 'compiler_invocations':0,
+            'fixture_only':True, 'generated_scaffold':generated}
+
+@check("scaffold source names reject comments and reset grep groups",
+       "sprintf's 'the (word-aligned)' comment replaced its authoritative config name")
+def _scaffold_source_names():
+    scaffold_name_regression(f"{KIT}/scaffold.py", KIT, os.path.join(SP, "handwork"))
+    return None
+
+
 # ---------------------------------------------------------------- resumable.py
 
 @check("fullstop derives only script basenames from a checkout path with spaces",
