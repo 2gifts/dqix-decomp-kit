@@ -1815,6 +1815,119 @@ def _classify_timer_rela():
     return None
 
 
+def _linked_fixture_object(text, address, size, export, expected, *, rom_size=None, rom_offsets=None):
+    """Link one complete ARM fixture; optional site mapping is explicit for size counterfactuals."""
+    import struct
+    import buildcfg
+
+    assert buildcfg.REGION == "usa", "these measured main ARM fixtures require DQIX_REGION=usa"
+    assert not any(os.environ.get(name) for name in ("MWCC", "WGATE_FLAGS", "WDIFF_FLAGS")), "fixture requires unmodified compiler settings"
+    repo = buildcfg.REPO
+    config = os.path.join(repo, buildcfg.config_dir("main"))
+    symbols, slots = {}, {}
+    from pathlib import Path
+    for path in Path(config).rglob("symbols.txt"):
+        overlay = re.search(r"(?:^|/)overlays/ov(\d+)(?:/|$)", path.as_posix())
+        module = "overlay(%d)" % int(overlay.group(1)) if overlay else "main"
+        for line in path.read_text(encoding="utf-8").splitlines():
+            match = re.match(r"(\S+)\s+kind:\S+.*?addr:0x([0-9a-fA-F]+)", line)
+            if match:
+                name, value = match.group(1), int(match.group(2), 16)
+                symbols.setdefault(name, set()).add((value, module))
+                function = re.search(r"kind:function\(arm,size=0x([0-9a-fA-F]+)\)", line)
+                if function:
+                    slots.setdefault(name, set()).add((value, int(function.group(1), 16)))
+    header = open(os.path.join(config, "delinks.txt"), encoding="utf-8").read().split("\n\n", 1)[0]
+    base = min(int(value, 16) for value in re.findall(r"start:0x([0-9a-fA-F]+)", header))
+    pristine = open(os.path.join(repo, buildcfg.pristine("main")), "rb").read()
+    rom_size = size if rom_size is None else rom_size
+    target = pristine[address - base:address - base + rom_size]
+    assert len(target) == rom_size and slots[export] == {(address, rom_size)}, "fixture ROM slot changed"
+    expected = sorted(expected)
+    assert len({row[0] for row in expected}) == len(expected), "expected relocation offsets repeat"
+    if rom_offsets is None:
+        rom_offsets = {row[0]: row[0] for row in expected}
+    assert set(rom_offsets) == {row[0] for row in expected}, "ROM site map must cover exactly the fixture relocations"
+    metadata = {}
+    for line in open(os.path.join(config, "relocs.txt"), encoding="utf-8"):
+        match = re.fullmatch(r"from:0x([0-9a-fA-F]+) kind:(\S+) to:(\S+)(?: add:(\S+))? module:(\S+)\s*", line)
+        if match:
+            origin, kind, value, addend, module = match.groups()
+            if kind == "overlay_id":
+                assert value.isdecimal() and addend is None and module == "none", "unexpected overlay ID row"
+                continue
+            assert re.fullmatch(r"0x[0-9a-fA-F]+", value), "unexpected relocation address"
+            key = int(origin, 16)
+            assert key not in metadata, "duplicate configured relocation site"
+            metadata[key] = (kind, int(value, 16) + (int(addend, 0) if addend else 0), module)
+        else:
+            assert not line.startswith("from:"), "unparsed main relocation row: " + line.strip()
+
+    elf = _compile_elf(text, repo)
+    assert not isinstance(elf, str), elf
+    assert elf["e_machine"] == "EM_ARM" and elf.elfclass == 32 and elf.little_endian, "fixture changed ELF architecture"
+    table = elf.get_section_by_name(".symtab")
+    definitions = [symbol for symbol in table.iter_symbols()
+                   if symbol.name == export and isinstance(symbol["st_shndx"], int)]
+    assert len(definitions) == 1, "fixture must define its real bound symbol once"
+    definition = definitions[0]
+    assert definition["st_info"]["type"] == "STT_FUNC" and definition["st_info"]["bind"] == "STB_GLOBAL", "fixture lost its global function binding"
+    index = definition["st_shndx"]
+    section = elf.get_section(index)
+    allocated = [i for i, sec in enumerate(elf.iter_sections()) if sec["sh_flags"] & 2 and sec["sh_size"]]
+    assert allocated == [index], "fixture gained an extra allocated section"
+    assert section.name == ".text" and section["sh_flags"] == 6, "export left ordinary executable text"
+    assert len(section.data()) == size, "fixture emitted size changed"
+    assert definition["st_value"] == 0 and definition["st_size"] == size, "fixture export span changed"
+    exports = [symbol.name for symbol in table.iter_symbols()
+               if symbol["st_info"]["bind"] in ("STB_GLOBAL", "STB_WEAK")
+               and isinstance(symbol["st_shndx"], int) and elf.get_section(symbol["st_shndx"])["sh_flags"] & 2]
+    assert exports == [export], "fixture gained a runtime export"
+    undefined = {symbol.name for symbol in table.iter_symbols() if symbol.name and symbol["st_shndx"] == "SHN_UNDEF"}
+    assert undefined == {row[2] for row in expected}, "fixture helper/data identities changed"
+    linked, relocations, seen = bytearray(section.data()), [], set()
+    for relsec in elf.iter_sections():
+        if relsec["sh_type"] not in ("SHT_REL", "SHT_RELA") or relsec["sh_info"] != index:
+            continue
+        relsymbols = elf.get_section(relsec["sh_link"])
+        for rr in relsec.iter_relocations():
+            assert rr.is_RELA(), "fixture lost its explicit RELA addends"
+            offset, kind = rr["r_offset"], rr["r_info_type"]
+            assert offset % 4 == 0 and 0 <= offset <= size - 4, "relocation is outside the export"
+            assert offset not in seen, "duplicate relocation site"
+            seen.add(offset)
+            name = relsymbols.get_symbol(rr["r_info_sym"]).name
+            assert len(symbols[name]) == 1, "fixture has an ambiguous configured binding"
+            value, module = next(iter(symbols[name]))
+            addend = rr["r_addend"]
+            rom_offset = rom_offsets[offset]
+            assert rom_offset % 4 == 0 and 0 <= rom_offset <= rom_size - 4, "mapped relocation is outside the original ROM slot"
+            word = struct.unpack_from("<I", linked, offset)[0]
+            romword = struct.unpack_from("<I", target, rom_offset)[0]
+            if kind == 1:
+                assert addend == -8, "ARM BL lost its explicit -8 addend"
+                assert word >> 24 == 0xeb and romword >> 24 == 0xeb, "PC24 site is not an ARM BL"
+                immediate = romword & 0xffffff
+                immediate -= 0x1000000 if immediate & 0x800000 else 0
+                assert address + rom_offset + 8 + immediate * 4 == value, "call target disagrees with original ROM site"
+                assert metadata[address + rom_offset] == ("arm_call", value, module), "call metadata binding changed"
+                displacement = value + addend - (address + offset)
+                assert displacement % 4 == 0 and -(1 << 25) <= displacement < (1 << 25), "PC24 out of range"
+                word = (word & 0xff000000) | ((displacement >> 2) & 0xffffff)
+            elif kind == 2:
+                word = (value + addend) & 0xffffffff
+                assert romword == word, "ABS32 target disagrees with original ROM site"
+                assert metadata[address + rom_offset] == ("load", word, module), "ABS32 metadata binding changed"
+            else:
+                raise AssertionError("unexpected runtime relocation kind %s" % kind)
+            struct.pack_into("<I", linked, offset, word)
+            relocations.append((offset, kind, name, value, addend))
+    assert sorted(relocations) == expected, "fixture's complete relocation identities changed"
+    return {"linked": bytes(linked), "target": target, "relocations": sorted(relocations),
+            "section_index": index, "exports": exports, "undefined": sorted(undefined),
+            "size": len(linked), "rom_size": rom_size, "rom_offsets": rom_offsets}
+
+
 def _relative_byte_offset():
     """The real fi/fd loader distinguishes a byte offset from an integer address sum."""
     import struct
@@ -1829,21 +1942,6 @@ def _relative_byte_offset():
         return "the isolated relative-byte-offset expression is missing or ambiguous"
     counterfactual = source.replace(pointer_sum, integer_sum)
 
-    repo = buildcfg.REPO
-    config = os.path.join(repo, buildcfg.config_dir("main"))
-    symbols = {}
-    for line in open(os.path.join(config, "symbols.txt"), encoding="utf-8"):
-        match = re.match(r"(\S+)\s+kind:\S+.*?addr:0x([0-9a-fA-F]+)", line)
-        if match:
-            symbols[match.group(1)] = int(match.group(2), 16)
-    delinks = open(os.path.join(config, "delinks.txt"), encoding="utf-8").read()
-    header = delinks.split("\n\n", 1)[0]
-    base = min(int(value, 16) for value in re.findall(r"start:0x([0-9a-fA-F]+)", header))
-    pristine = open(os.path.join(repo, buildcfg.pristine("main")), "rb").read()
-    address, size, export = 0x02042804, 320, "func_02042804"
-    target = pristine[address - base:address - base + size]
-    assert len(target) == size and symbols[export] == address, "fixture ROM slot changed"
-    # These are the actual ROM targets, not merely the fixture's undefined names.
     expected = [
         (0x20, 1, "__clear", 0x0200f374, -8),
         (0x30, 1, "sprintf", 0x02003ce8, -8),
@@ -1860,75 +1958,93 @@ def _relative_byte_offset():
         (0x13c, 2, "data_020f0061", 0x020f0061, 0),
     ]
 
-    def linked_object(text):
-        elf = _compile_elf(text, repo)
-        assert not isinstance(elf, str), elf
-        table = elf.get_section_by_name(".symtab")
-        definitions = [symbol for symbol in table.iter_symbols()
-                       if symbol.name == export and isinstance(symbol["st_shndx"], int)]
-        assert len(definitions) == 1, "fixture must define its real bound symbol once"
-        definition = definitions[0]
-        assert definition["st_info"]["type"] == "STT_FUNC" and definition["st_info"]["bind"] == "STB_GLOBAL", "fixture lost its global function binding"
-        index = definition["st_shndx"]
-        section = elf.get_section(index)
-        allocated = [i for i, sec in enumerate(elf.iter_sections())
-                     if sec["sh_flags"] & 2 and sec["sh_size"]]
-        assert allocated == [index], "fixture gained an extra allocated section"
-        assert section.name == ".text" and section["sh_flags"] & 4, "export left executable text"
-        assert len(section.data()) == size, "fixture size changed"
-        assert definition["st_value"] == 0 and definition["st_size"] == size, "fixture export span changed"
-        exports = [symbol.name for symbol in table.iter_symbols()
-                   if symbol["st_info"]["bind"] in ("STB_GLOBAL", "STB_WEAK")
-                   and isinstance(symbol["st_shndx"], int)
-                   and elf.get_section(symbol["st_shndx"])["sh_flags"] & 2]
-        assert exports == [export], "fixture gained a runtime export"
-        undefined = {symbol.name for symbol in table.iter_symbols() if symbol["st_shndx"] == "SHN_UNDEF"}
-        undefined.discard("")
-        assert undefined == {row[2] for row in expected}, "fixture helper/data identities changed"
-        linked = bytearray(section.data())
-        relocations = []
-        seen = set()
-        for relsec in elf.iter_sections():
-            if relsec["sh_type"] not in ("SHT_REL", "SHT_RELA") or relsec["sh_info"] != index:
-                continue
-            relsymbols = elf.get_section(relsec["sh_link"])
-            for rr in relsec.iter_relocations():
-                assert rr.is_RELA(), "fixture lost its explicit RELA addends"
-                offset, kind = rr["r_offset"], rr["r_info_type"]
-                assert offset % 4 == 0 and 0 <= offset <= size - 4, "relocation is outside the export"
-                assert offset not in seen, "duplicate relocation site"
-                seen.add(offset)
-                name = relsymbols.get_symbol(rr["r_info_sym"]).name
-                value, addend = symbols[name], rr["r_addend"]
-                word = struct.unpack_from("<I", linked, offset)[0]
-                romword = struct.unpack_from("<I", target, offset)[0]
-                if kind == 1:
-                    assert word >> 24 == 0xeb and romword >> 24 == 0xeb, "PC24 site is not an ARM BL"
-                    immediate = romword & 0xffffff
-                    immediate -= 0x1000000 if immediate & 0x800000 else 0
-                    assert address + offset + 8 + immediate * 4 == value, "call target disagrees with ROM"
-                    displacement = value + addend - (address + offset)
-                    assert displacement % 4 == 0 and -(1 << 25) <= displacement < (1 << 25), "PC24 out of range"
-                    word = (word & 0xff000000) | ((displacement >> 2) & 0xffffff)
-                elif kind == 2:
-                    word = (value + addend) & 0xffffffff
-                    assert romword == word, "ABS32 target disagrees with ROM"
-                else:
-                    raise AssertionError("unexpected runtime relocation kind %s" % kind)
-                struct.pack_into("<I", linked, offset, word)
-                relocations.append((offset, kind, name, value, addend))
-        assert sorted(relocations) == expected, "fixture's 13 real relocation identities changed"
-        return {"linked": bytes(linked), "relocations": relocations, "section_index": index,
-                "exports": exports, "size": len(linked)}
-
-    positive = linked_object(source)
-    negative = linked_object(counterfactual)
+    positive = _linked_fixture_object(source, 0x02042804, 320, "func_02042804", expected)
+    negative = _linked_fixture_object(counterfactual, 0x02042804, 320, "func_02042804", expected)
+    target = positive["target"]
     assert positive["linked"] == target, "relative-byte-pointer fixture no longer matches all 320 ROM bytes"
     assert positive["relocations"] == negative["relocations"], "counterfactual changed helper/data bindings"
     differences = [offset for offset, (good, bad) in enumerate(zip(target, negative["linked"])) if good != bad]
     assert differences == [0xa8, 0xaa], "integer-address counterfactual drifted: %s" % differences
     assert struct.unpack_from("<I", positive["linked"], 0xa8)[0] == 0xe0802002, "ROM add operands changed"
     assert struct.unpack_from("<I", negative["linked"], 0xa8)[0] == 0xe0822000, "negative is no longer the reversed integer add"
+    return None
+
+
+def _yaw_distance_definite_assignment():
+    """Only remove a default initializer when the equality return proves assignment."""
+    import struct
+    import buildcfg
+    if buildcfg.REGION != "usa":
+        return "the main:02041378 compiler fixture requires DQIX_REGION=usa"
+    source = open(f"{KIT}/regress_fixtures/DefiniteYawDistance_02041378.cpp", encoding="utf-8").read()
+    bare = "fix32_t distance;"
+    assert source.count(bare) == 1, "definitely-assigned distance declaration changed"
+    for guard in ("if (current == target) {\n        return;", "if (current < target)", "else if (target < current)"):
+        assert guard in source, "the initialization precondition changed"
+    counterfactual = source.replace(bare, "fix32_t distance = 0;")
+    expected = [
+        (0x70, 1, "_Z22fix32ReduceAngle0To2Pii", 0x02030f30, -8),
+        (0xb0, 1, "_Z22fix32ReduceAngle0To2Pii", 0x02030f30, -8),
+        (0xe4, 1, "_Z20StoreVec3AtField0x50Phiii", 0x0203db34, -8),
+    ]
+    positive = _linked_fixture_object(source, 0x02041378, 248, "func_02041378", expected)
+    shifted = [(offset + 8, *binding) for offset, *binding in expected]
+    negative = _linked_fixture_object(counterfactual, 0x02041378, 256, "func_02041378", shifted,
+                                      rom_size=248, rom_offsets={row[0] + 8: row[0] for row in expected})
+    assert positive["linked"] == positive["target"], "definitely-assigned fixture no longer matches all 248 bytes"
+    assert [row[1:] for row in positive["relocations"]] == [row[1:] for row in negative["relocations"]], "initializer changed the three real call bindings/order"
+    assert struct.unpack_from("<I", negative["linked"], 0x18)[0] == 0xe15c0003, "initializer no longer emits the redundant CMP"
+    assert struct.unpack_from("<I", negative["linked"], 0x1c)[0] == 0xe3a02000, "initializer no longer emits MOV distance,0"
+    return None
+
+
+def _external_getter_comparison():
+    """The measured combined local/nested guard preserves one external call and short circuit."""
+    import struct
+    import buildcfg
+    if buildcfg.REGION != "usa":
+        return "the main:02026bdc compiler fixture requires DQIX_REGION=usa"
+    source = open(f"{KIT}/regress_fixtures/ExternalGetterComparison_02026bdc.cpp", encoding="utf-8").read()
+    nested = """            if (unknownObject != 0) {
+                int unknownValue = unknownObject->obj3D_.GetField06();
+                if (unknownValue == value) {
+                    combatantState->flags |= 8;
+                    combatantState->flags &= ~0x10;
+                    found = 1;
+                }
+            }"""
+    compound = """            if (unknownObject != 0 && value == unknownObject->obj3D_.GetField06()) {
+                combatantState->flags |= 8;
+                combatantState->flags &= ~0x10;
+                found = 1;
+            }"""
+    assert source.count(nested) == 1, "combined local/nested null-guard form changed"
+    counterfactual = source.replace(nested, compound)
+    expected = [
+        (0x0c, 1, "_ZN9GameState11GetInstanceEv", 0x0200f398, -8),
+        (0x24, 1, "_ZN9GameState20GetGameObjectByIndexEi", 0x0200fd70, -8),
+        (0x40, 1, "func_ov017_0218b5b0", 0x0218b5b0, -8),
+        (0x4c, 1, "_Z25GetCombatantWithFlag0x100P9GameStatei", 0x0200ff1c, -8),
+        (0x58, 1, "func_02012fe4", 0x02012fe4, -8),
+        (0xc4, 1, "_ZNK8Object3D10GetField06Ev", 0x020375f8, -8),
+        (0x104, 1, "_s32_div_f", 0x0200cf44, -8),
+        (0x144, 1, "_s32_div_f", 0x0200cf44, -8),
+        (0x198, 1, "_Z18SetFields1a8And1acP9S02053f4cii", 0x02053f4c, -8),
+        (0x1a4, 1, "_Z13SetField0x1b0Pvh", 0x02053f6c, -8),
+        (0x1dc, 1, "_Z22IsValueInRange0201b5d8i", 0x0201b5d8, -8),
+        (0x1ec, 1, "_ZN9GameState20GetUnknownGameObjectEv", 0x0200fddc, -8),
+        (0x1f8, 1, "_ZNK8Object3D10GetField06Ev", 0x020375f8, -8),
+        (0x274, 1, "_Z18SetFields1a8And1acP9S02053f4cii", 0x02053f4c, -8),
+        (0x280, 1, "_Z13SetField0x1b0Pvh", 0x02053f6c, -8),
+    ]
+    positive = _linked_fixture_object(source, 0x02026bdc, 736, "func_02026bdc", expected)
+    negative = _linked_fixture_object(counterfactual, 0x02026bdc, 736, "func_02026bdc", expected)
+    assert positive["linked"] == positive["target"], "external-getter fixture no longer matches all 736 bytes"
+    assert positive["relocations"] == negative["relocations"], "combined source form changed real call bindings"
+    differences = [offset for offset, (good, bad) in enumerate(zip(positive["target"], negative["linked"])) if good != bad]
+    assert differences == [0x1fc, 0x1fe], "compound-guard counterfactual drifted: %s" % differences
+    assert struct.unpack_from("<I", positive["linked"], 0x1fc)[0] == 0xe1500009, "ROM CMP operand order changed"
+    assert struct.unpack_from("<I", negative["linked"], 0x1fc)[0] == 0xe1590000, "counterfactual no longer reverses the CMP operands"
     return None
 
 
@@ -2016,6 +2132,12 @@ def run_functional():
     check("relative file offsets retain the genuine byte-pointer ADD operands",
           "main:02042804 is REGPERM2 with an integer address sum but MATCH320 with a char* "
           "relative-offset addition; both forms must keep the same 13 real relocation targets")(_relative_byte_offset)
+    check("equality return permits the definitely-assigned yaw distance declaration",
+          "main:02041378 matches248 after definite assignment; restoring only distance=0 emits256 "
+          "and shifts three real calls, whose bindings must be verified against original ROM sites")(_yaw_distance_definite_assignment)
+    check("external getter local and nested null guard retain exact CMP operand order",
+          "main:02026bdc is REGPERM2 with the measured compound direct-getter guard and MATCH736 "
+          "with the combined local/nested form; both preserve all15 calls including overlay17")(_external_getter_comparison)
     bad = 0
     for module, addr, prior, expected, budget, what in FUNCTIONAL:
         src = os.path.join(KIT, prior)
@@ -2063,8 +2185,10 @@ def sweep_fingerprint():
     """Hash of everything that decides whether a crack still lands."""
     import hashlib
     h = hashlib.md5()
-    for p in ("colorsweep.py", "wdiff.py", "wgate.py",
-              "regress_fixtures/RelativeByteOffset_02042804.cpp"):
+    for p in ("colorsweep.py", "wdiff.py", "wgate.py", "regress.py",
+              "regress_fixtures/RelativeByteOffset_02042804.cpp",
+              "regress_fixtures/DefiniteYawDistance_02041378.cpp",
+              "regress_fixtures/ExternalGetterComparison_02026bdc.cpp"):
         try:
             h.update(open(f"{KIT}/{p}", "rb").read())
         except OSError:
