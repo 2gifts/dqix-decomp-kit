@@ -53,6 +53,36 @@ TAGRE = rf'// USA: {TAGPRE}({HEXC}{{8}})' + (r'\b' if MAIN else '')
 def tag_addr(txt):
     m = re.search(TAGRE, txt)
     return m.group(1).lower() if m else None       # .lower() is a no-op on the overlay class
+
+
+_BOUND = None
+
+
+def bound_addrs():
+    global _BOUND
+    if _BOUND is None:
+        _BOUND = {}
+        try:
+            for line in open(f"{REPO}/{CFG}/symbols.txt", encoding="utf-8", errors="ignore"):
+                m = re.match(r"(\S+)\s+kind:function\([^\n]*?addr:0x([0-9a-f]{8})", line)
+                if m:
+                    _BOUND.setdefault(m.group(1), m.group(2))
+        except OSError:
+            pass
+    return _BOUND
+
+
+def retag(txt, fp):
+    m = re.search(r"^// USA: (\S+)[^\n]*\n([^\n]*)", txt, re.M)
+    if not m:
+        return txt
+    a = bound_addrs().get(m.group(1))
+    if not a:
+        print(f"NO-TAG {os.path.basename(fp)}: '// USA: {m.group(1)}' names no function of this module")
+        return txt
+    keep = "" if 'extern "C"' in m.group(2) else " // KEEP-NAME"
+    print(f"RETAG {os.path.basename(fp)}: {m.group(1)} -> {TAGPRE}{a}")
+    return txt[:m.start()] + f"// USA: {TAGPRE}{a}{keep}" + txt[m.start() + 8 + len(m.group(1)):]
 # VERIFICATION MODE (default OFF — production behaviour is completely unchanged when unset).
 # NOCOMMIT=1 runs the entire pipeline for real — gather, classify, integrate, full `ninja check` gate —
 # but makes no git commit, and therefore also skips the final clean() so the gated tree survives for
@@ -400,6 +430,9 @@ def gather(files):
         except OSError:
             continue
         a = tag_addr(txt)
+        if not a:
+            txt = retag(txt, fp)
+            a = tag_addr(txt)
         if not a: continue
         if _already(a) or (a in skipset and not NOSKIP): continue
         # keep EVERY distinct attempt, not just the first: the hold dir holds several tries per addr and

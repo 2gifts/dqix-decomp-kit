@@ -1369,6 +1369,32 @@ def _rela_addend():
     return None
 
 
+@check("ov_recover gathers a staged file tagged with its bound name instead of skipping it",
+       "gather() located a file only by a `// USA: func_<addr>` tag, so a port tagged with its curated "
+       "name (`// USA: _Z22OnDMAOrTimerCompletioni`) passed wgate and was silently left out of every "
+       "wave: 4 main ports and ov033:022a296c")
+def _retag_bound_name():
+    import ast
+    src = open(f"{KIT}/ov_recover.py", encoding="utf-8").read()
+    fns = {n.name: ast.get_source_segment(src, n) for n in ast.parse(src).body if isinstance(n, ast.FunctionDef)}
+    if "retag" not in fns or "bound_addrs" not in fns:
+        return "ov_recover.py has no retag()/bound_addrs()"
+    if "txt = retag(txt, fp)" not in src:
+        return "gather() no longer retags an untagged candidate"
+    ns = {"re": re, "os": os, "TAGPRE": "func_ov015_",
+          "_BOUND": {"_Z3Foov": "0218bb3c", "Bar": "0218bb40"}}
+    exec(fns["bound_addrs"] + "\n" + fns["retag"], ns)
+    out = ns["retag"]("// USA: _Z3Foov\nARM void Foo()\n{\n}\n", "x.cpp")
+    if not out.startswith("// USA: func_ov015_0218bb3c // KEEP-NAME\nARM void Foo()"):
+        return "a C++ definition was retagged as %r" % out.split("\n")[0]
+    out = ns["retag"]('// USA: Bar\nextern "C" ARM void Bar()\n', "y.cpp")
+    if not out.startswith("// USA: func_ov015_0218bb40\n"):
+        return "an extern \"C\" definition was retagged as %r" % out.split("\n")[0]
+    if ns["retag"]("// USA: Nope\nARM void Nope()\n", "z.cpp") != "// USA: Nope\nARM void Nope()\n":
+        return "an unknown name was rewritten"
+    return None
+
+
 @check("prready.py refuses a pull request built on a stale kit or decomp, and passes a current one",
        "pull requests built on stale checkouts reverted the CI workflow, re-added a file for an address "
        "another file owned, renamed a symbol in one region only, recorded dead ends for matched "
