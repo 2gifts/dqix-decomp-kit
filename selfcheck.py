@@ -44,6 +44,24 @@ def check(name, why):
     return deco
 
 
+@check("every Claude Code session in the kit updates it on start and on every stop",
+       "agents updated the kit only when told to, so improvements reached them late or never")
+def _kit_hooks():
+    import json
+    try:
+        hooks = json.load(open(f"{KIT}/.claude/settings.json", encoding="utf-8")).get("hooks", {})
+    except (OSError, ValueError) as e:
+        return f".claude/settings.json unreadable: {e}"
+    cmds = {k: " ".join(h.get("command", "") for m in v for h in m.get("hooks", [])) for k, v in hooks.items()}
+    if "kit_update.py" not in cmds.get("SessionStart", ""):
+        return "no SessionStart hook runs kit_update.py"
+    if "kit_update.py" not in cmds.get("Stop", "") or "--hook" not in cmds.get("Stop", ""):
+        return "no Stop hook runs kit_update.py --hook"
+    if "_freshness()" not in read(f"{KIT}/kitpaths.py"):
+        return "kitpaths.py no longer warns when the kit is behind"
+    return None
+
+
 @check("gates accept THUMB",
        "an ARM-only keep-raw regex rejected every thumb function in main as NO-DEF")
 def _thumb():

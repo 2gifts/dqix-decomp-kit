@@ -36,6 +36,57 @@ def _state():
 SP = _state()
 REPO = _norm(os.environ.get("DQIX_REPO", os.path.join(os.path.dirname(KIT), "dqix-decomp")))
 CLAUDE_PROJECTS = _norm(os.environ.get("CLAUDE_PROJECTS", os.path.expanduser("~/.claude/projects")))
+KIT_URL = os.environ.get("DQIX_KIT_URL", "https://github.com/ZevyaDev/dqix-decomp-kit.git")
+KIT_BRANCH = os.environ.get("DQIX_KIT_BRANCH", "main")
+BUSY = ("pull_all.pid", "wave.lock", "claims/INTEGRATING")
+FRESH_EVERY = 600
+
+
+def busy():
+    found = []
+    for b in BUSY:
+        p = os.path.join(SP, b)
+        if os.path.isdir(p) or (os.path.isfile(p) and os.path.getsize(p) > 0):
+            found.append(b)
+    return found
+
+
+def behind():
+    """Commits the published kit is ahead of this checkout, fetched at most every FRESH_EVERY seconds."""
+    import subprocess
+    import time
+    stamp = os.path.join(SP, "wlog", ".kit_fresh")
+    try:
+        count = int(open(stamp, encoding="utf-8").read().strip() or 0)
+        age = time.time() - os.path.getmtime(stamp)
+    except (OSError, ValueError):
+        count, age = 0, FRESH_EVERY
+    if age >= FRESH_EVERY:
+        os.makedirs(os.path.dirname(stamp), exist_ok=True)
+        open(stamp, "w", encoding="utf-8").write(str(count))
+        run = lambda *a: subprocess.run(["git", "-C", KIT, *a], capture_output=True, text=True, timeout=30)
+        if run("fetch", "-q", KIT_URL, KIT_BRANCH).returncode == 0:
+            count = int(run("rev-list", "--count", "HEAD..FETCH_HEAD").stdout.strip() or 0)
+            open(stamp, "w", encoding="utf-8").write(str(count))
+    return count
+
+
+def stale_message(count):
+    return (f"KIT IS {count} COMMIT(S) BEHIND the published kit: run `python {KIT}/kit_update.py` now "
+            "(it keeps your own unpublished commits on top)")
+
+
+def _freshness():
+    count = behind()
+    if count and not busy():
+        print(stale_message(count), file=sys.stderr)
+
+
+if os.environ.get("DQIX_NO_FRESHNESS") != "1":
+    try:
+        _freshness()
+    except Exception:
+        pass
 
 if __name__ == "__main__":
     which = sys.argv[1] if len(sys.argv) > 1 else ""

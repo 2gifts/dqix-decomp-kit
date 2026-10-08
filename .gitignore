@@ -36,6 +36,7 @@ __pycache__/
 /.claude/*
 !/.claude/skills/
 !/.claude/workflows/
+!/.claude/settings.json
 
 /refs/*
 !/refs/VERIFIED.txt
