@@ -58,8 +58,15 @@ row for `worker_src/deadends.md` to the kit; if you found a lever, send the rule
 
 ## Tool fixes and new levers
 
-Where a lever belongs and what proof it needs: [IMPROVEMENT_LOOP.md](IMPROVEMENT_LOOP.md). Before
-opening a pull request against the kit:
+Every recipe, rule, repair, tool fix and automation an agent finds comes back here, in the session
+that found it. Where each belongs and what proof it needs: [IMPROVEMENT_LOOP.md](IMPROVEMENT_LOOP.md).
+
+1. Commit on your kit checkout; `kit_update.py` keeps unpublished commits on top of every update, so
+   you never have to choose between sharing and staying current.
+2. Push to your fork of the kit and open the pull request against `ZevyaDev/dqix-decomp-kit` `main`
+   (`gh pr create -R ZevyaDev/dqix-decomp-kit`).
+
+Before opening it:
 
     python selfcheck.py
     python regress.py              # add --slow after touching colorsweep.py, wdiff.py or wgate.py

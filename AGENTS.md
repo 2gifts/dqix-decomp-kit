@@ -13,19 +13,34 @@ directory:
 A session that runs from another directory sets `DQIX_KIT` to the checkout; skills and workflows
 read it.
 
-## Before any work: update the kit
+## The kit improves itself: update on every stop, share every improvement
 
-The kit is maintained continuously; fixes, levers and rules land in it all the time. At the start of
-every session, and again before resuming work after any pause, run:
+Every agent using the kit both takes improvements from it and gives them back.
+
+**Take.** Update at the start of every session and every time you stop:
 
     python kit_update.py
 
+Claude Code sessions opened in this directory run it automatically (`.claude/settings.json`: a
+SessionStart hook, and a Stop hook that keeps you working if an instruction file changed). Every
+other agent (Codex, MiniMax, any model) runs it itself; nothing reminds you but this: every kit
+script prints `KIT IS N COMMIT(S) BEHIND` while the checkout is stale, and `claim.py` hands out no
+new work (exit 3) until you update. Your own unpublished kit commits are kept on top of each update.
+
 | exit | meaning | do |
 |---|---|---|
-| 0 | up to date, or fast-forwarded and `kit_init.py` re-run | re-read every file it prints as `RE-READ`, then work |
+| 0 | up to date, or updated and `kit_init.py` re-run | re-read every file it prints as `RE-READ`, then work |
 | 1 | the fetch failed (offline), or `kit_init.py` failed after an update | tell the user the line it printed; fix a `kit_init.py` FAIL before working |
 | 2 | the fleet or an integration is running, so nothing was pulled | tell the user an update is waiting; never pull under a running script |
-| 3 | local changes or local commits block the fast-forward | tell the user; never stash, reset or discard them yourself |
+| 3 | uncommitted changes, or your unpublished commits conflict with the update | tell the user; never stash, reset or discard them yourself |
+
+**Give.** Anything you learned that another agent could reuse goes back to the kit as a pull request
+on ZevyaDev/dqix-decomp-kit in the same session: a recipe or lever (`worker_src/core.md`), a
+`colorsweep.py` rule, a repair, a tool fix, a new automation or script, a skill improvement, a
+dead end (`worker_src/deadends.md`). Commit it with its proof (rule 14), push it to your fork and
+open the pull request. A local-only improvement helps one agent once; a merged one helps every agent
+from their next stop on. [docs/IMPROVEMENT_LOOP.md](docs/IMPROVEMENT_LOOP.md) says where each kind
+belongs, [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) what a kit pull request needs.
 
 ## Where things are
 
@@ -105,7 +120,8 @@ the user asks.
     lever into a `colorsweep.py` rule, a repair, or a `core.md` rule citing the address, with its
     `regress.py` proof, or decline it in `levers_declined.txt`. On a miss, record the blocker with
     `blocker.py` and what was ruled out in `deadends.md`. The dispatcher stops claiming until this is
-    done. [docs/IMPROVEMENT_LOOP.md](docs/IMPROVEMENT_LOOP.md) has the whole loop.
+    done. Then send it to the kit as a pull request in the same session.
+    [docs/IMPROVEMENT_LOOP.md](docs/IMPROVEMENT_LOOP.md) has the whole loop.
 20. Reserve work with ONE open issue in the kit repository listing every address you are actively
     working on, never one issue per function. Edit it as the list changes. The moment you open the
     pull request for those addresses, close the issue with a comment naming it
