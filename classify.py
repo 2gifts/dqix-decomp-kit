@@ -17,6 +17,7 @@ import re, os, glob, subprocess, hashlib
 from elftools.elf.elffile import ELFFile
 
 import buildcfg
+import dataown
 
 REPO = _kp.REPO
 SP = _kp.SP
@@ -262,7 +263,7 @@ def classify(MOD, cands, workdir=None, names=None):
                     elif (S & ~1) != tgt:
                         verdict = 'RELOCWRONG'; break
                 elif typ == 2:                               # ABS32 (.word data/func pointer)
-                    A = int.from_bytes(mine[off:off + 4], 'little')
+                    A = dataown.addend(rr, mine)
                     if S is None:
                         verdict = 'RISKY'
                     # ABS32 to a THUMB function has bit0 set by the linker (interworking) -> S+A+1.

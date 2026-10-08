@@ -1344,9 +1344,10 @@ def _dataown_replay():
 
 
 @check("a pool word's addend is read from r_addend, not from the zero mwcc writes in place",
-       "mwcc emits RELA relocations with a zero in-place word; integrate.py and wgate.py took the "
-       "addend from that word, so a pool reference to symbol+N resolved to the bare symbol and a "
-       "correct candidate was rejected as RELOC-WRONG (141 such words in the committed build)")
+       "mwcc emits RELA relocations with a zero in-place word; integrate.py, wgate.py and classify.py "
+       "took the addend from that word, so a pool reference to symbol+N resolved to the bare symbol and "
+       "a correct candidate was rejected as RELOC-WRONG (141 such words in the committed build; "
+       "classify.py dropped ov015:0218bb3c from a wave that wgate had passed)")
 def _rela_addend():
     import buildcfg
     import dataown
@@ -1363,6 +1364,8 @@ def _rela_addend():
         return "integrate.py no longer reads the addend through dataown.addend"
     if "rr['r_addend'] if rr.is_RELA()" not in open(f"{KIT}/wgate.py", encoding="utf-8").read():
         return "wgate.py no longer reads r_addend for a RELA pool word"
+    if "dataown.addend(rr, mine)" not in open(f"{KIT}/classify.py", encoding="utf-8").read():
+        return "classify.py no longer reads the addend through dataown.addend"
     return None
 
 
