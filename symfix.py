@@ -12,6 +12,7 @@ declare any struct it names.
 
     python symfix.py <file.cpp> [...]        rewrite in place, report what changed
     python symfix.py --audit                 every clsbest artifact, no writes
+    python symfix.py --all                   rewrite every clsbest artifact in place
 """
 import os as _kpos, sys as _kpsys
 _kpsys.path.insert(0, _kpos.path.dirname(_kpos.path.abspath(__file__)))
@@ -221,8 +222,16 @@ def verdict(mod, addr, path):
 
 
 def main():
-    args = [a for a in sys.argv[1:] if not a.startswith("--")]
-    audit = "--audit" in sys.argv
+    args = [a for a in sys.argv[1:] if not a.startswith("-")]
+    flags = [a for a in sys.argv[1:] if a.startswith("-")]
+    if any(f in ("-h", "--help") for f in flags):
+        print(__doc__)
+        sys.exit(0)
+    unknown = [f for f in flags if f not in ("--audit", "--all")]
+    if unknown or not (args or flags):
+        print(__doc__)
+        sys.exit(2)
+    audit = "--audit" in flags
     files = args or sorted(glob.glob(f"{SP}/clsbest/*.cpp"))
     total, touched, refused = 0, 0, 0
     for f in files:

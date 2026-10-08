@@ -298,7 +298,7 @@ pairing and cross-reference every hit with the committed sources -- reading an a
 source that HAS the shape beats another thousand guesses, and finding that none does is itself the
 answer; `--twonode` keeps only genuine two-node addresses (decoded add immediate not a multiple of
 0x1000) with a real field offset ·
-`symfix.py <file.cpp> [...] | --audit` rewrite callee declarations that cannot resolve to the
+`symfix.py <file.cpp> [...] | --audit | --all` rewrite callee declarations that cannot resolve to the
 committed symbol — an `extern "C"` declaration of a name the ROM carries mangled. The mangled name
 encodes the parameter list, so the correct signature is derivable; the struct it names is forward
 declared. Every rewrite is GATED before and after and rolled back if it does not compile, because a
