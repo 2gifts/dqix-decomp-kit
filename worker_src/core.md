@@ -787,6 +787,14 @@ is register NUMBERS around a byte value, retype it before touching anything else
   fp. Declare each callee with `unsigned char index` and pass the int bare.
 - `unsigned char` locals get stack slots in REVERSE declaration order (last declared = lowest sp
   offset).
+- **an `and rX, rX, #0xff` on a LOOP COUNTER means the counter is an `unsigned char`** (`02072398`).
+  Declaring it `int` and spelling the bound as `(i & 0xff) < 18` emits the IDENTICAL mask, so the
+  diff hides the real fault in a clean scratch 3-cycle: the `-1` constant, the counter and the
+  index temp come out as {r2, r3, r0} instead of {r3, r0, r2}. `colorsweep.py` (80 compiles),
+  `frida/schedforce.py` (81 flips, best 9 bytes) and every declaration-order permutation all left it
+  untouched; `unsigned char i = 0; while (i < 18)` closed 20 bytes to MATCH in one compile. When a
+  byte mask feeds the bound compare and the only residue is scratch register NUMBERS around the
+  counter and a constant, retype the COUNTER before trying any colouring lever.
 - **a local's width decides where its LOAD is scheduled** (`021665b0`; params and locals typed `short`/`unsigned char` took `0204cd60` from LOOP-SHAPE 3272 to MATCH): locals loaded from `short`
   fields must be typed `short` too; as `int` their `ldrsh` stays grouped instead of interleaving
   with neighbouring zero-inits. Locals reused across switch cases go at FUNCTION scope so the cases
