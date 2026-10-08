@@ -129,7 +129,7 @@ def _ctx(MOD):
     return _CTX[MOD]
 
 
-CACHED = ('SIZE', 'BYTEDIFF', 'COMPILE')
+CACHED = ('SIZE', 'BYTEDIFF')
 _CACHE = {}
 
 
@@ -140,7 +140,8 @@ def _headers():
         index = subprocess.run(["git", "-C", REPO, "ls-files", "-s", "--", "include", "libs"],
                                capture_output=True, text=True)
         ok = dirty.returncode == 0 and index.returncode == 0 and not dirty.stdout.strip()
-        _CACHE['headers'] = hashlib.sha1(index.stdout.encode()).hexdigest() if ok else None
+        state = index.stdout + open(__file__, encoding="utf-8").read()
+        _CACHE['headers'] = hashlib.sha1(state.encode()).hexdigest() if ok else None
     return _CACHE['headers']
 
 
