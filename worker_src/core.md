@@ -4,15 +4,6 @@ backslash escapes, `$` inside a string. The failure is a truncated or missing fi
 `unexpected EOF while looking for matching`. Shell redirection is fine only for a one-liner like
 `echo ok > flag.txt`.
 
-## NATURAL CAPABILITY MASK UPDATES CAN STEER INDEPENDENT STORES
-On a genuine ordinary flag word, try the device's constituent capability updates instead of one
-combined mask when the remaining residue is an independent store/literal-load exchange. In
-`020d0078` (900 bytes), replacing `|= 0xd000` with consecutive `|= 0x1000; |= 0xc000;` and both
-`|= 0x5000` sites with `|= 0x1000; |= 0x4000;` closed SCHED18 under stock flags. This is one measured
-three-site result, not three isolated ablations. Preserve the genuine unsigned descriptor, native
-72-byte specification and canonical shared command; verify every allocated byte and real relocation.
-Do not apply this to volatile/MMIO words, observable intermediate updates or unknown aliases.
-
 ## YOUR FUNCTION GOES IN THE `wip/` DIR YOUR PROMPT NAMES — NEVER IN `src/`
 The build globs every `.cpp` under `src/`, so an in-progress file there — a `goto` whose label you
 have not typed yet — fails `ninja check` for EVERY module and every other worker, and an integration
@@ -494,16 +485,6 @@ after a register argument's field load (`0219e384`):
 
     short GetId() const { short id = s4; return id; }      Call(c->GetId(), x, y, z, 0);
 
-**A REAL EXTERNAL GETTER CAN NEED A LOCAL INSIDE A NESTED NULL GUARD.** When the
-remaining difference is CMP operand order against an external getter return,
-test a normal scalar result local inside the existing pointer guard, followed by
-an inner comparison. Preserve return-width promotion, short circuiting and call
-count. On `02026bdc` (736B), the combined local/nested-guard form changed
-`cmp sb,r0` to `cmp r0,sb`: 2 -> MATCH, with the same 15 real calls. Reversing
-the compound equality alone was inert. This measured edit combines the local
-and guard split; neither is independently established as the cause. The earlier
-static-inline getter recipe above remains evidence for its own address.
-
 ### TWO STRUCT COPIES THE ROM INTERLEAVES — the destinations are in two stack objects
 The ROM forms both copies' source and destination addresses before the first `stm`; ours finishes
 the first copy before forming the second's (`0219e384`). Splitting the one frame struct in two, with
@@ -940,61 +921,6 @@ Two levers, in this order:
 - `unsigned short saved = f->x; f->x |= 0x4800;` instead of an int temp + cast stops the u16
   truncation sinking to the store (`02037934`).
 
-## SCALAR AGGREGATE INITIALIZATION — check unexpected clearing calls
-If `{0}` on a one-member stream creates an extra clear call while the target stores only its
-pointer, initialize that genuine member explicitly. At `main:020211b0`, explicit `stream.ptr = 0`,
-key-count initialization before the real key-array clear, and table fields read at their use sites
-jointly closed OVERGEN16 to MATCH484 with all 11 calls intact. These three edits were tested
-together, so do not attribute the whole change to one edit. Preserve every initialized field and
-the real clear span; do not remove initialization, invent fields or alter a helper's interface.
-
-## GROUPED OBJECT PROOFS — bind sections by index
-
-For grouped source, bind each definition by its symbol's `st_shndx` and each relocation section by
-`sh_info`; section names and offsets need not be unique. Grouped `main:020210f8`, `020211b0` and
-`02022bb0` emit three `.text` sections of184/484/456 bytes. Index-based proof reconstructs all1124
-ROM bytes and54 actual calls; `get_section_by_name('.text')` inspects only one section. Count only
-allocated symbols when checking runtime exports. Give each delink owner one contiguous `.text`
-span: DSD rejects repeated `.text` entries under one file. Completion668 and cancellation456 can
-use separate coherent owners with unchanged bodies. Finish with the whole-module `ninja check`.
-
-## SIGNED-HALFWORD ROUNDING — retain the narrowing point and store once
-When rounding a signed-halfword member before adding an independent adjustment, keep the rounded
-value in a real `short` local, then perform the final member store once. At `main:0205cc50`,
-`short rounded = (short)((width + 7) & ~7); width = rounded + adjustment;` removed an extra
-STRH/LDRSH and closed OVERGEN4 to MATCH216. The target's LSL16/ASR16 proves narrowing occurs before
-the add; a wide uncast expression changes boundary values. This requires a nonvolatile member and
-no intervening observation, alias, call or side effect. Do not change a formal's width to force it.
-
-## INDEXED MEMBER LOADS — bind, then advance
-For an indexed member array, `pointer = state->cells; pointer += index;` retains the member-offset
-addition before the indexed load (`main:02048e2c`). Keep the returned two-word position inside its
-consuming loop when the copy stores matter. A const-reference adapter can materialize an integer
-conversion temporary, but it must call the authoritative helper using its genuine return type and
-pointer parameter. Never change a C-linkage declaration to steer code generation.
-
-Exact size can hide canceling address misses. Take the genuine member-element address, such as
-`&state->unk_6fc0[12]`, before investigating register order. For a large nested member offset,
-compare an already matched sibling's access path while retaining canonical member types. At
-`main:02024d94`, these changes exposed UNDERGEN4 from SHAPE109, then restored MATCH228 with the
-existing two-stage grotto accessor; all 14 calls and both pool words resolve exactly.
-
-## RELATIVE FILE OFFSETS — add through the byte pointer
-When a record word is proven to store a relative byte offset, add it to the allocation's genuine
-`char*` base before converting the resulting pointer to the existing address-word type. At
-`main:02042804`, `reinterpret_cast<int>(base + entry.val)` closes REGPERM2 to MATCH320;
-`reinterpret_cast<int>(base) + entry.val` keeps the reversed ADD operands. The slow paired fixture
-checks all 320 linked bytes, the sole export and all 13 real relocation targets; its integer-add
-counterfactual differs only at +0xa8/+0xaa. Keep the actual field/output types and well-formed
-resource-offset assumptions. This is not a rewrite for arbitrary integer sums or a reason to
-invent pointer fields.
-
-## STREAM HEADER AND PAYLOAD ALIGNMENT — preserve definition order
-Advance the stream past the entry header before computing its variable payload size. Keep alignment
-as `(payloadSize + alignmentMask) & ~alignmentMask`, without a separate complement local. These
-source forms fix pointer-add/arithmetic and zero/complement ordering (`main:02076738`, diff 19 to
-8 to MATCH); declaration order alone does not express the same definition points.
-
 ## CONSECUTIVE BITFIELD WRITES MERGE INTO ONE STORE — count the stores, not the writes
 For a run of N consecutive writes to the same bitfield STORAGE UNIT, mwcc emits N read-modify-write
 sequences and exactly **ONE** store. The merge is keyed on the resolved storage-unit address, not on
@@ -1128,14 +1054,6 @@ When the target RE-LOADS a value you are holding in a register:
 mwcc predicates small arms and cross-jumps shared tails. The SHAPE of the source decides both, and
 this family closed more large functions than any expression change:
 
-**AN EQUALITY RETURN CAN MAKE A DEFAULT INITIALIZER REDUNDANT.** If equal values
-return before two signed-order arms, prove that every remaining path assigns
-the result before removing its initializer. On `02041378` (248B), `distance = 0`
-added a CMP and MOV and emitted 256B. A bare declaration with the unchanged
-`current < target` / `target < current` arms restored MATCH248 under stock flags.
-Keep the equality return and both assignments; a partially assigned or
-fall-through local is not eligible for this rewrite.
-
 **A CONSTANT THE ROM ISSUES BEFORE AN ALU OP WAS NOT IN THAT BLOCK** (`021e3178`). The first-pass
 scheduler breaks ties by: critical-path slack, successors made ready, path height, then operand class
 (an instruction that reads a register beats `mov rX,#imm` / a pool load), then IR order. So in one
@@ -1169,27 +1087,6 @@ result tested `mvn; cmp; beq far; cmp #1` is `if (r != -1) { if (r == 1) ... } e
 field the ROM RE-LOADS after a conditional region is read there through a one-line `static inline`
 reaching it by DIFFERENT arithmetic, one spelling per reload (r29). Helpers with control flow or
 several statements are not inlined: write those bodies in place.
-
-`main:02024e78` independently confirms r20: changing only its unsigned-byte predicate's return
-from `bool` to `int` restores the materialized comparison, taking UNDERGEN12 at824 bytes to exact836.
-The remaining LOOP-SHAPE1 was a real guard-scope error: the mode gates only the type test; the
-existing action-eligibility helper runs unconditionally afterwards. The final stock object proves
-all836 bytes,28 calls and two table references, with no emitted helper/data. Its genuine24-byte
-record constructor, forwarding guard and32/8-byte table indexing were tested together earlier;
-do not attribute that bundled832-to824 change to the constructor alone. Independently matched
-`main:020251bc` uses the same truthful record/predicate forms and proves all928 bytes/30 relocations.
-
-A direct field reread can also change coloring when CSE retains only one memory load. At
-`main:020177d4`, retain the signed `parentKey` local for the guard, but compare
-`source->parentKey` in the nested lookup. Existing `r29_field_reread` closed REGPERM13 to MATCH704
-with one LDRSH and all 18 call relocations intact. Confirm no intervening write or call can change
-the field; do not add volatile or a barrier, or require a second load merely to fit the recipe.
-
-When a missing-resource failure is a separate block after a loading region, nest that region under
-`if (file != NULL)` and put the missing-file failure in the corresponding `else`. At
-`main:020151cc`, an early failure return produced 612 bytes; this source shape restored MATCH620
-with the real resource types and all 25 relocations. Preserve the inner model-validation failure
-and the target's allocation/decompression behavior; nesting does not make its failure paths safer.
 
 **THE ORDER OF TWO PREDICATED ARMS IS THE SOURCE ORDER OF THE IF/ELSE** (`02174a80`): `strhle` before
 `asrgt` means the `<= 0` arm was written first: `if (x <= 0) { x = -1; } else { count++; }`.
@@ -1451,17 +1348,6 @@ bare and then assigned — `Vec3i v; ... v = data;` — makes mwcc emit an out-o
 `_ZN5Vec3iaSERKS_` and call it; `-nodead` keeps that symbol, so the file can never match however
 good its byte count looks. Give the struct ONE ARRAY member (`struct Vec3i { int v[3]; };`) and the
 copy inlines to the ROM's `ldr [pc] / ldm / stm`.
-
-When a canonical class already has an assignment body in another translation unit, declare the
-ordinary `operator=(const Class&)` in that shared class and keep its field-copy definition in the
-existing owner. For `main:0201cb60`, the genuine Vector3i interface removes a duplicate 28-byte weak
-export while preserving all 820 bytes of the Zone3D owner, relocations and full USA checks. Do not
-replace the real named-member type with an array wrapper or raw mangled alias.
-
-For dictionary lookup wrappers that emit extra helpers, compose the existing typed getters, bind
-the caller's index before loading the list, and share the NULL failure join. This preserves each
-guard without materializing a bool (`main:020b7990`, 184 to 152 to MATCH at 144 bytes). Preserve the
-later dereference and original invalid-input assumptions.
 
 ## DIVISION AND SMALL HELPERS
 - `% 3u` (unsigned) binds `_u32_div_f`; a signed modulo binds `_s32_div_f` (`0208a5d8`). An
