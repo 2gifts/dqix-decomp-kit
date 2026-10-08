@@ -23,6 +23,7 @@ _kpsys.path.insert(0, _kpos.path.dirname(_kpos.path.abspath(__file__)))
 import kitpaths as _kp
 import hashlib
 import itertools
+from functools import lru_cache
 import os
 import re
 import subprocess
@@ -134,10 +135,162 @@ def _fmt_score(n):
                              " +oversize" if over else "")
 
 
+def _scope_code(text):
+    """Mask non-code without changing offsets; reject unfinished/conditional source.
+
+    Braces in comments, strings, macros and raw strings cannot establish a local scope.
+    Conditional preprocessing needs a real preprocessor, so decline that ambiguous file.
+    """
+    chars = list(text)
+    i, size = 0, len(text)
+    while i < size:
+        start, end = i, None
+        if text[i] == "#" and not text[text.rfind("\n", 0, i)+1:i].strip():
+            if re.match(r"#\s*(?:if|ifdef|ifndef|elif|else|endif)\b", text[i:]):
+                return None
+            end = text.find("\n", i)
+            while end != -1 and text[i:end].rstrip("\r").endswith("\\"):
+                end = text.find("\n", end + 1)
+            end = size if end == -1 else end
+        elif text.startswith("//", i):
+            end = text.find("\n", i)
+            while end != -1 and text[i:end].rstrip("\r").endswith("\\"):
+                end = text.find("\n", end + 1)
+            end = size if end == -1 else end
+        elif text.startswith("/*", i):
+            close = text.find("*/", i + 2)
+            if close == -1:
+                return None
+            end = close + 2
+        else:
+            raw = re.match(r'(?:u8|u|U|L)?R"([^\s()\\]{0,16})\(', text[i:]) \
+                  if text[i] in "RuUL" else None
+            if raw and (i == 0 or not (text[i-1].isalnum() or text[i-1] == "_")):
+                closing = ")" + raw.group(1) + '"'
+                close = text.find(closing, i + raw.end())
+                if close == -1:
+                    return None
+                end = close + len(closing)
+            elif text[i] in "\"'":
+                quote, j = text[i], i + 1
+                while j < size and text[j] != quote:
+                    if text[j] == "\\":
+                        j += 2
+                    elif text[j] in "\r\n":
+                        return None
+                    else:
+                        j += 1
+                if j >= size:
+                    return None
+                end = j + 1
+        if end is None:
+            i += 1
+            continue
+        for k in range(start, end):
+            if chars[k] not in "\r\n":
+                chars[k] = " "
+        i = end
+    return "".join(chars)
+
+
+def _scope_function_header(header):
+    """Recognize ordinary free/out-of-class definitions, never lambdas/initializers."""
+    if "=" in header or "[" in header or ";" in header:
+        return False
+    m = re.fullmatch(r"([\w\s:*&]+?)([A-Za-z_]\w*(?:::[A-Za-z_]\w*)*)"
+                     r"\s*\((.*)\)\s*(?:const\s*)?", header, re.S)
+    if not m or not (m.group(1)[-1].isspace() or m.group(1)[-1] in "*&") or \
+            m.group(2) in ("if", "while", "for", "switch", "catch"):
+        return False
+    return not re.search(r"\b(?:namespace|typedef|using)\b", m.group(1))
+
+
+@lru_cache(maxsize=8)
+def _local_scopes(text):
+    """Map complete code lines to (block opening line, function opening line).
+
+    This is a conservative scope recognizer, not a C++ parser. Only recognized function
+    bodies and their ordinary control/bare blocks qualify. Aggregate/enum/lambda/initializer
+    bodies (including local classes) are opaque. Parameters are outside those scopes.
+    """
+    code = _scope_code(text)
+    if code is None:
+        return {}, {}
+    original = text.split("\n")
+    masked = code.split("\n")
+    stack, scopes, bounds = [], {}, {}
+    parens = brackets = line = 0
+    segment = 0
+    line_contexts, invalid_lines = {}, set()
+    for offset, char in enumerate(code):
+        if char == "\n":
+            line += 1
+            if parens or brackets:
+                invalid_lines.add(line)
+            continue
+        if char.isspace():
+            continue
+        current = stack[-1] if stack else None
+        if current and current[0] in ("function", "block"):
+            line_contexts.setdefault(line, set()).add((current[1], current[2]))
+        else:
+            invalid_lines.add(line)
+        if char == "(":
+            parens += 1
+        elif char == ")":
+            parens -= 1
+        elif char == "[":
+            brackets += 1
+        elif char == "]":
+            brackets -= 1
+        elif char == "{":
+            invalid_lines.add(line)
+            header = code[segment:offset].strip()
+            outer = current[0] if current else None
+            if not parens and not brackets and outer in (None, "namespace") and _scope_function_header(header):
+                kind, function = "function", line
+            elif not parens and not brackets and outer in (None, "namespace") and \
+                    (re.fullmatch(r"(?:inline\s+)?namespace(?:\s+[\w:]+)?", header) or header == "extern"):
+                kind, function = "namespace", None
+            elif not parens and not brackets and outer in ("function", "block") and \
+                    (not header or re.match(r"^(?:if|else|for|while|switch|do|try|catch)\b", header)):
+                kind, function = "block", current[2]
+            else:
+                kind, function = "opaque", None
+            stack.append((kind, line, function))
+            segment = offset + 1
+        elif char == "}":
+            invalid_lines.add(line)
+            if not stack:
+                return {}, {}
+            closed = stack.pop()
+            if closed[0] == "function":
+                bounds[closed[1]] = line
+            segment = offset + 1
+        elif char == ";" and not parens and not brackets:
+            # A declaration can itself be an unbraced controlled statement. Its apparent
+            # brace scope is the surrounding function, but moving it changes the guard.
+            # Inspect the complete statement prefix, including multiline conditions.
+            head = code[segment:offset].strip()
+            if re.match(r"^(?:if|else|for|while|do|case|default)\b|^[A-Za-z_]\w*\s*:(?!:)", head):
+                first = code.count("\n", 0, segment)
+                invalid_lines.update(range(first, line + 1))
+            segment = offset + 1
+        if parens < 0 or brackets < 0:
+            return {}, {}
+    if stack or parens or brackets:
+        return {}, {}
+    for i, contexts in line_contexts.items():
+        # Do not rewrite a line containing any comment/string/macro payload, either.
+        if i not in invalid_lines and len(contexts) == 1 and original[i] == masked[i] and \
+                not _is_unbraced_body(masked, i):
+            scopes[i] = next(iter(contexts))
+    return scopes, bounds
+
+
 def _body_lines(text):
-    """Line indices that are inside the function body (skip includes and comments)."""
-    return [i for i, ln in enumerate(text.split("\n"))
-            if ln.strip() and not ln.lstrip().startswith(("#", "//"))]
+    """Complete code lines in recognized local scopes, excluding headers and type fields."""
+    return list(_local_scopes(text)[0])
 
 
 def _is_pointer_decl(text, star):
@@ -216,15 +369,16 @@ def r3_postinc_migrate(text):
     """`T q = p;` + `*p++ = v;`  <->  `T q = p++;` + `*q = v;` (strcat's colouring flip)."""
     out = []
     lines = text.split("\n")
+    scopes, _ = _local_scopes(text)
     decl = re.compile(r"^(\s*)([\w:]+\s*\*+\s*)(%s)\s*=\s*(%s)\s*;\s*$" % (IDENT, IDENT))
     for i, ln in enumerate(lines):
         m = decl.match(ln)
-        if not m:
+        if not m or i not in scopes:
             continue
         indent, typ, q, p = m.groups()
         for j in range(i + 1, min(i + 4, len(lines))):
             st = re.match(r"^(\s*)\*%s\+\+\s*=\s*(.+);\s*$" % re.escape(p), lines[j])
-            if not st:
+            if not st or scopes.get(j) != scopes[i]:
                 continue
             new = list(lines)
             new[i] = "%s%s%s = %s++;" % (indent, typ, q, p)
@@ -237,7 +391,7 @@ def r3_postinc_migrate(text):
             indent, typ, q, p = rev.groups()
             for j in range(i + 1, min(i + 4, len(lines))):
                 st = re.match(r"^(\s*)\*%s\s*=\s*(.+);\s*$" % re.escape(q), lines[j])
-                if not st:
+                if not st or scopes.get(j) != scopes[i]:
                     continue
                 new = list(lines)
                 new[i] = "%s%s%s = %s;" % (indent, typ, q, p)
@@ -293,10 +447,11 @@ def r4_decl_reorder(text):
     """Swap two adjacent independent declarations (recipe #9: reverse definition order)."""
     out = []
     lines = text.split("\n")
+    scopes, _ = _local_scopes(text)
     decl = re.compile(r"^\s*(unsigned |signed |const )*[\w:]+\s*\**\s*%s\s*(=[^;]*)?;\s*$" % IDENT)
     for i in range(len(lines) - 1):
         a, b = lines[i], lines[i + 1]
-        if not (decl.match(a) and decl.match(b)):
+        if i not in scopes or scopes.get(i + 1) != scopes[i] or not (decl.match(a) and decl.match(b)):
             continue
         if a.strip().startswith(("return", "//")) or not _decl_independent(a, b):
             continue
@@ -310,11 +465,13 @@ def r5_stmt_swap(text):
     """Swap two adjacent independent assignments, initialised declarations or member updates."""
     out = []
     lines = text.split("\n")
+    scopes, _ = _local_scopes(text)
     stmt = re.compile(r"^\s*(?!(?:else|return|do|goto|case|default|delete|throw)\b)(?:%s[\s*]+)*%s(?:\(\))?(?:\s*(?:->|\.)\s*%s)*\s*[-+*/&|^]?=(?!=)[^;]+;\s*$"
                       % (IDENT, IDENT, IDENT))
     for i in range(len(lines) - 1):
         a, b = lines[i], lines[i + 1]
-        if not (stmt.match(a) and stmt.match(b)) or not _independent(a, b):
+        if i not in scopes or scopes.get(i + 1) != scopes[i] or \
+                not (stmt.match(a) and stmt.match(b)) or not _independent(a, b):
             continue
         new = list(lines)
         new[i], new[i + 1] = b, a
@@ -365,9 +522,10 @@ def r7_decl_split(text):
     """
     out = []
     lines = text.split("\n")
+    scopes, _ = _local_scopes(text)
     for i, ln in enumerate(lines):
         m = DECL.match(ln)
-        if not m:
+        if not m or i not in scopes:
             continue
         indent, typ, name, expr = m.groups()
         if "(" in expr:                      # a call may not be moved across other statements
@@ -386,20 +544,17 @@ def r8_decl_hoist(text):
     """
     out = []
     lines = text.split("\n")
+    scopes, _ = _local_scopes(text)
     for i, ln in enumerate(lines):
         m = DECL.match(ln)
-        if not m:
+        if not m or i not in scopes:
             continue
         indent, typ, name, expr = m.groups()
         if "(" in expr:
             continue
-        # find the start of this block
-        start = None
-        for j in range(i - 1, -1, -1):
-            if lines[j].rstrip().endswith("{"):
-                start = j + 1
-                break
-        if start is None or start >= i:
+        start = scopes[i][0] + 1
+        if start >= i or any(lines[j].strip() and scopes.get(j) != scopes[i]
+                             for j in range(start, i)):
             continue
         between = "\n".join(lines[start:i])
         reads = set(re.findall(IDENT, expr))
@@ -430,11 +585,12 @@ def r12_zero_accumulator(text):
     """
     out = []
     lines = text.split("\n")
+    scopes, _ = _local_scopes(text)
     # DECL is anchored ^...$ and compiled WITHOUT re.M, so it only matches a single line -- every
     # other rule feeds it one line at a time and this one must too.
     for i, ln in enumerate(lines):
         m = DECL.match(ln)
-        if not m:
+        if not m or i not in scopes:
             continue
         indent, typ, name, expr = m.groups()
         t = typ.strip()
@@ -465,33 +621,27 @@ def r11_decl_to_function_scope(text):
     it BELOW `int i;` is completely inert, so every insertion point is generated.
     """
     lines = text.split("\n")
-    # function body opens at the first line that is exactly `{`
-    body = next((i for i, l in enumerate(lines) if l.strip() == "{"), None)
-    if body is None:
-        return []
-    # the run of function-scope declarations right after it
-    slots, k = [body + 1], body + 1
-    while k < len(lines) and (DECL.match(lines[k]) or BAREDECL.match(lines[k])):
-        k += 1
-        slots.append(k)
+    scopes, bounds = _local_scopes(text)
     out = []
-    for i in range(k, len(lines)):
-        m = DECL.match(lines[i])
-        if not m:
-            continue
-        indent, typ, name, expr = m.groups()
-        # No guard on the initialiser here, unlike r8. r8 MOVES the computation and so must prove
-        # nothing in between changes its inputs; r11 leaves the assignment exactly where it is and
-        # moves only the declaration, which cannot change evaluation order or meaning. r8's
-        # `"(" in expr` guard would reject `*(unsigned char*)(p + 0x8e07)` -- the very case that
-        # closed 0209ed0c.
-        if not lines[i].startswith(indent + typ.split()[0]):
-            continue
-        decl = "    %s%s;" % (typ, name)
-        assign = "%s%s = %s;" % (indent, name, expr)
-        for pos in slots:
-            new = lines[:pos] + [decl] + lines[pos:i] + [assign] + lines[i + 1:]
-            out.append(("declfnscope:%s@%d" % (name, pos - body), "\n".join(new)))
+    for body, end in bounds.items():
+        # Only this function's leading local declaration run supplies insertion slots.
+        slots, k = [body + 1], body + 1
+        while k < end and scopes.get(k) == (body, body) and (DECL.match(lines[k]) or BAREDECL.match(lines[k])):
+            k += 1
+            slots.append(k)
+        for i in range(k, end):
+            m = DECL.match(lines[i])
+            if not m or i not in scopes or scopes[i][1] != body:
+                continue
+            indent, typ, name, expr = m.groups()
+            # Leave the assignment in place, including casts/calls. Only the declaration moves.
+            if not lines[i].startswith(indent + typ.split()[0]):
+                continue
+            decl = "    %s%s;" % (typ, name)
+            assign = "%s%s = %s;" % (indent, name, expr)
+            for pos in slots:
+                new = lines[:pos] + [decl] + lines[pos:i] + [assign] + lines[i + 1:]
+                out.append(("declfnscope:%s@%d" % (name, pos - body), "\n".join(new)))
     return out
 
 
@@ -520,9 +670,12 @@ def r10_const_local(text):
     """
     out = []
     lines = text.split("\n")
+    scopes, _ = _local_scopes(text)
     add = re.compile(r"^(\s*)([\w:]+\s*)(\*+)\s*(%s)(\s*=\s*[^;]+;)\s*$" % IDENT)
     drop = re.compile(r"^(\s*)([\w:]+\s*)(\*+)\s*const\s+(%s)(\s*=\s*[^;]+;)\s*$" % IDENT)
     for i, ln in enumerate(lines):
+        if i not in scopes:
+            continue
         m = drop.match(ln)
         if m:
             new = list(lines)
@@ -541,7 +694,7 @@ def r10_const_local(text):
     body = "\n".join(lines[start:])
     for i in range(start, len(lines)):
         m = _R10_SCALAR.match(lines[i])
-        if not m or _r52_written(m.group(3), body.replace(lines[i], "", 1)):
+        if i not in scopes or not m or _r52_written(m.group(3), body.replace(lines[i], "", 1)):
             continue
         new = list(lines)
         new[i] = "%sconst %s" % (m.group(1), lines[i][len(m.group(1)):])
@@ -565,10 +718,11 @@ def r14_decl_move(text):
     """
     out = []
     lines = text.split("\n")
+    scopes, _ = _local_scopes(text)
     decl = re.compile(r"^\s*(unsigned |signed |const |struct )*[\w:]+\s*\**\s*%s\s*=[^;]*;\s*$" % IDENT)
     runs, cur = [], []
     for i, ln in enumerate(lines):
-        if decl.match(ln) and not ln.strip().startswith(("return", "//")):
+        if i in scopes and decl.match(ln) and not ln.strip().startswith(("return", "//")):
             cur.append(i)
         else:
             if len(cur) > 2:
@@ -792,10 +946,11 @@ def r17_decl_permute(text):
     PERMUTE_CAP = 40
     out = []
     lines = text.split(chr(10))
+    scopes, _ = _local_scopes(text)
     decl = re.compile(r"^\s*(unsigned |signed |const |struct )*[\w:]+\s*\**\s*%s\s*=[^;]*;\s*$" % IDENT)
     runs, cur = [], []
     for i, ln in enumerate(lines):
-        if decl.match(ln) and not ln.strip().startswith(("return", "//")):
+        if i in scopes and decl.match(ln) and not ln.strip().startswith(("return", "//")):
             cur.append(i)
         else:
             if 3 <= len(cur) <= 5:

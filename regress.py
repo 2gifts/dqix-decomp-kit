@@ -1427,6 +1427,83 @@ def _r4_same_type():
     return None
 
 
+def colorsweep_local_scope_regression(C):
+    """Portable controls for the real BackupDeviceSpec declswap@20 layout defect."""
+    rules = (C.r3_postinc_migrate, C.r4_decl_reorder, C.r5_stmt_swap,
+             C.r7_decl_split, C.r8_decl_hoist, C.r10_const_local,
+             C.r11_decl_to_function_scope, C.r12_zero_accumulator,
+             C.r14_decl_move, C.r16_stmt_move, C.r17_decl_permute)
+    # The first pair is the exact field/type pair moved in main020d0078. The other
+    # members exercise the initialized-declaration move/permutation rules too.
+    members = ('    unsigned int erasePageTime;\n'
+               '    unsigned char initialStatus;\n'
+               '    int a = 1;\n    int b = 2;\n    int c = 3;\n')
+    negatives = {
+        "aggregate fields": 'struct BackupDeviceSpec {\n' + members + '};\n',
+        "global declarations": members,
+        "namespace declarations": 'namespace N {\n' + members + '}\n',
+        "union fields": 'union U {\n' + members + '};\n',
+        "local type fields": 'void f() {\n    struct Local {\n' + members + '    };\n}\n',
+        "parameter declarations": 'int f(a, b)\n    int a;\n    int b;\n{\n    return a+b;\n}\n',
+        "comment payload": '/*\nvoid fake() {\n' + members + '}\n*/\n',
+        "raw string payload": 'const char* text = R"scope(\nvoid fake() {\n' + members + '}\n)scope";\n',
+        "continued macro": '#define FAKE() void fake() { \\\n    int a = 1; \\\n    int b = 2; }\n',
+        "unfinished scope": 'void f() {\n' + members,
+        "conditional scope": '#if FLAG\nvoid f() {\n' + members + '}\n#endif\n',
+    }
+    for name, text in negatives.items():
+        for rule in rules:
+            got = rule(text)
+            if got:
+                return "%s changed %s (%s)" % (rule.__name__, name, got[0][0])
+    # Braced nested locals, ordinary multiline definitions, namespaces and multiple
+    # functions still qualify. Strings/comments containing braces must not hide them.
+    run = '    int a = 1;\n    int b = 2;\n    int c = 3;\n'
+    positives = {
+        "ordinary locals": 'ARM int f()\n{\n' + run + '    return a+b+c;\n}\n',
+        "nested locals": 'int f() {\n    if (flag) {\n' + run + '    }\n}\n',
+        "namespace function": 'namespace N {\nint f() {\n' + run + '}\n}\n',
+        "quoted braces": '/* { } */\nint f() {\n    const char* s = "{ }";\n' + run + '}\n',
+        "raw braces": 'int f() {\n    const char* s = R"x(\n{ }\n)x";\n' + run + '}\n',
+    }
+    for name, text in positives.items():
+        for rule in (C.r4_decl_reorder, C.r14_decl_move, C.r17_decl_permute):
+            if not rule(text):
+                return "%s lost %s" % (rule.__name__, name)
+    protected = ('struct S {\n' + members + '};\n')
+    params = 'int f(\n    int first,\n    int second)\n{\n'
+    text = protected + params + run + '    return first+second+a+b+c;\n}\n'
+    for rule in rules:
+        for label, candidate in rule(text):
+            if not candidate.startswith(protected + params):
+                return "%s altered aggregate/parameter prefix (%s)" % (rule.__name__, label)
+    # Separate functions and a local class must never supply r11 insertion slots.
+    first = 'void first() {\n    int a;\n}\n'
+    second = ('void second() {\n    struct Local {\n    int member;\n    };\n'
+              '    if (flag) {\n        int moved = value;\n        use(moved);\n    }\n}\n')
+    got = C.r11_decl_to_function_scope(first + second)
+    if not got or any(not cand.startswith(first) or '    int member;' not in cand for _,cand in got):
+        return "r11 lost genuine second-function local or moved a local class field"
+    unbraced = 'void f() {\n    if (flag)\n        int a = 1;\n    int b = 2;\n}\n'
+    if C.r4_decl_reorder(unbraced):
+        return "r4 moved a declaration across an unbraced guard"
+    multiline = 'void f() {\n    if (\n        flag)\n        int a = 1;\n    int b = 2;\n}\n'
+    if C.r4_decl_reorder(multiline):
+        return "r4 moved a declaration across a multiline unbraced guard"
+    pointer_return = 'void *f() {\n' + run + '    return 0;\n}\n'
+    if not C.r4_decl_reorder(pointer_return):
+        return "r4 lost ordinary pointer-return function locals"
+    return None
+
+
+@check("declaration rewrites preserve aggregate, global and parameter scopes",
+       "main020d0078's actual declswap@20 moved BackupDeviceSpec erasePageTime/initialStatus "
+       "members, changing offsets, size and clear extent; file-wide declaration scans also "
+       "mistook namespace globals, local-class fields and non-code for locals")
+def _colorsweep_local_scopes():
+    return colorsweep_local_scope_regression(load("colorsweep"))
+
+
 @check("r41 folds the -1 form back to 0 as well as away from it",
        "the rule shipped one-way, generating only `x >= 0` -> `x > -1`. The sweep hill-climbs from "
        "OUR source toward the ROM, so the direction it needs most is removing an `mvn` our source "
