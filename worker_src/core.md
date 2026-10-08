@@ -921,6 +921,14 @@ Two levers, in this order:
 - `unsigned short saved = f->x; f->x |= 0x4800;` instead of an int temp + cast stops the u16
   truncation sinking to the store (`02037934`).
 
+## SIGNED-HALFWORD ROUNDING — retain the narrowing point and store once
+When rounding a signed-halfword member before adding an independent adjustment, keep the rounded
+value in a real `short` local, then perform the final member store once. At `main:0205cc50`,
+`short rounded = (short)((width + 7) & ~7); width = rounded + adjustment;` removed an extra
+STRH/LDRSH and closed OVERGEN4 to MATCH216. The target's LSL16/ASR16 proves narrowing occurs before
+the add; a wide uncast expression changes boundary values. This requires a nonvolatile member and
+no intervening observation, alias, call or side effect. Do not change a formal's width to force it.
+
 ## INDEXED MEMBER LOADS — bind, then advance
 For an indexed member array, `pointer = state->cells; pointer += index;` retains the member-offset
 addition before the indexed load (`main:02048e2c`). Keep the returned two-word position inside its
@@ -1106,6 +1114,18 @@ result tested `mvn; cmp; beq far; cmp #1` is `if (r != -1) { if (r == 1) ... } e
 field the ROM RE-LOADS after a conditional region is read there through a one-line `static inline`
 reaching it by DIFFERENT arithmetic, one spelling per reload (r29). Helpers with control flow or
 several statements are not inlined: write those bodies in place.
+
+A direct field reread can also change coloring when CSE retains only one memory load. At
+`main:020177d4`, retain the signed `parentKey` local for the guard, but compare
+`source->parentKey` in the nested lookup. Existing `r29_field_reread` closed REGPERM13 to MATCH704
+with one LDRSH and all 18 call relocations intact. Confirm no intervening write or call can change
+the field; do not add volatile or a barrier, or require a second load merely to fit the recipe.
+
+When a missing-resource failure is a separate block after a loading region, nest that region under
+`if (file != NULL)` and put the missing-file failure in the corresponding `else`. At
+`main:020151cc`, an early failure return produced 612 bytes; this source shape restored MATCH620
+with the real resource types and all 25 relocations. Preserve the inner model-validation failure
+and the target's allocation/decompression behavior; nesting does not make its failure paths safer.
 
 **THE ORDER OF TWO PREDICATED ARMS IS THE SOURCE ORDER OF THE IF/ELSE** (`02174a80`): `strhle` before
 `asrgt` means the `<= 0` arm was written first: `if (x <= 0) { x = -1; } else { count++; }`.
