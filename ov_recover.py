@@ -708,10 +708,10 @@ def recurse(addrs):
         keep = [a for a in addrs if a not in named]
         skipped.extend(named); clean()
         for a in named:
-            if blamed[a] in ("compile", "config"):
-                (named_bad if NO_STRIKE[0] else faildefer).append(a)
-            else:
+            if blamed[a] == "unplaced" or (len(named) > 1 and blamed[a] in ("link", "symbol")):
                 drifted.append(a)
+            else:
+                (named_bad if NO_STRIKE[0] else faildefer).append(a)
         print(f"  named-cull {len(named)} {named[:4]} -> re-gate {len(keep)}")
         recurse(keep)
         return
