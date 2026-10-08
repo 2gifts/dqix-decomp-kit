@@ -13,7 +13,7 @@ import kitpaths as _kp
 # O(k*log N) gates = hours, so the gate cap fires and the ENTIRE wave defers uncommitted. That is the
 # 0-commit loop. Classifying first is ~0.3 s/func of pure local CPU and lets the integrator gate the
 # TRUSTED set as ONE green build, quarantining only the genuinely uncertain few for bisection.
-import re, os, glob, subprocess
+import re, os, glob, subprocess, hashlib
 from elftools.elf.elffile import ELFFile
 
 import buildcfg
@@ -129,6 +129,33 @@ def _ctx(MOD):
     return _CTX[MOD]
 
 
+CACHED = ('SIZE', 'BYTEDIFF', 'COMPILE')
+_CACHE = {}
+
+
+def _headers():
+    if 'headers' not in _CACHE:
+        dirty = subprocess.run(["git", "-C", REPO, "status", "--porcelain", "--", "include", "libs"],
+                               capture_output=True, text=True)
+        index = subprocess.run(["git", "-C", REPO, "ls-files", "-s", "--", "include", "libs"],
+                               capture_output=True, text=True)
+        ok = dirty.returncode == 0 and index.returncode == 0 and not dirty.stdout.strip()
+        _CACHE['headers'] = hashlib.sha1(index.stdout.encode()).hexdigest() if ok else None
+    return _CACHE['headers']
+
+
+def _verdicts():
+    if 'verdicts' not in _CACHE:
+        _CACHE['verdicts'] = {}
+        try:
+            for line in open(f"{SP}/wlog/classify_cache.tsv", encoding="utf-8"):
+                key, _, verdict = line.rstrip("\n").rpartition("\t")
+                _CACHE['verdicts'][key] = verdict
+        except OSError:
+            pass
+    return _CACHE['verdicts']
+
+
 def classify(MOD, cands, workdir=None, names=None):
     """cands: {addr: source_text}. Returns {addr: 'TRUSTED'|'RISKY'|<BAD verdict>}.
     MOD: overlay number ("000".."035") or "main".
@@ -142,6 +169,7 @@ def classify(MOD, cands, workdir=None, names=None):
     os.makedirs(work, exist_ok=True)
     pristine, base, symaddr, sizes, textrng = _ctx(MOD)
     out = {}
+    keys = {}
     src = f"{work}/c.cpp"
     obj = f"{work}/c.o"
     for addr, txt in cands.items():
@@ -157,8 +185,14 @@ def classify(MOD, cands, workdir=None, names=None):
             # Not in any CODE section (rodata/data/bss) -> not an emittable function. Parked, never struck.
             out[addr] = 'SECTION'; continue
         _want = _want or '.text'
-        open(src, 'w', encoding='utf-8').write(txt)
         _cc = cc_for((names or {}).get(addr) or src)
+        if _headers():
+            _flags = " ".join(FLAGS + flags_for((names or {}).get(addr) or src))
+            keys[addr] = "\t".join((MOD, addr, str(slot), _want, _cc, _headers(),
+                                    hashlib.sha1((_flags + "\0" + txt).encode()).hexdigest()))
+            if keys[addr] in _verdicts():
+                out[addr] = _verdicts()[keys[addr]]; continue
+        open(src, 'w', encoding='utf-8').write(txt)
         r = subprocess.run([_cc] + FLAGS + flags_for((names or {}).get(addr) or src) + ["-c", src, "-o", obj], capture_output=True, text=True,
                            cwd=REPO)
         if r.returncode != 0:
@@ -238,4 +272,12 @@ def classify(MOD, cands, workdir=None, names=None):
             out[addr] = verdict
         except Exception:
             out[addr] = 'COMPILE'
+            keys.pop(addr, None)
+    fresh = [(k, out[a]) for a, k in keys.items() if out.get(a) in CACHED and k not in _verdicts()]
+    if fresh:
+        os.makedirs(f"{SP}/wlog", exist_ok=True)
+        with open(f"{SP}/wlog/classify_cache.tsv", "a", encoding="utf-8") as fh:
+            for k, v in fresh:
+                fh.write(f"{k}\t{v}\n")
+                _verdicts()[k] = v
     return out
