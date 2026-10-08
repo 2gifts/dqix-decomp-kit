@@ -928,6 +928,12 @@ consuming loop when the copy stores matter. A const-reference adapter can materi
 conversion temporary, but it must call the authoritative helper using its genuine return type and
 pointer parameter. Never change a C-linkage declaration to steer code generation.
 
+Exact size can hide canceling address misses. Take the genuine member-element address, such as
+`&state->unk_6fc0[12]`, before investigating register order. For a large nested member offset,
+compare an already matched sibling's access path while retaining canonical member types. At
+`main:02024d94`, these changes exposed UNDERGEN4 from SHAPE109, then restored MATCH228 with the
+existing two-stage grotto accessor; all 14 calls and both pool words resolve exactly.
+
 ## STREAM HEADER AND PAYLOAD ALIGNMENT — preserve definition order
 Advance the stream past the entry header before computing its variable payload size. Keep alignment
 as `(payloadSize + alignmentMask) & ~alignmentMask`, without a separate complement local. These
