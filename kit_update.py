@@ -36,7 +36,8 @@ def main():
     if behind == 0:
         print("kit up to date")
         return
-    busy = [b for b in BUSY if os.path.exists(os.path.join(SP, b))]
+    busy = [b for b in BUSY if os.path.exists(os.path.join(SP, b))
+            and not (os.path.isfile(os.path.join(SP, b)) and os.path.getsize(os.path.join(SP, b)) == 0)]
     if busy:
         print(f"UPDATE WAITING: {behind} commit(s); {', '.join(busy)} present. A running bash script "
               "must never be rewritten under it: stop the fleet (touch STOP_PULL FLEET_STOPPED, "

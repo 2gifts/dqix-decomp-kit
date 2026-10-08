@@ -123,7 +123,7 @@ while :; do
   # working OTHER modules meanwhile. So: run it detached, publish which module is busy, and let
   # claim.py steer new slots elsewhere until it clears.
   if [ -n "$integ_pid" ] && ! kill -0 "$integ_pid" 2>/dev/null; then
-    integ_pid=""; : > "$SP/claims/INTEGRATING"
+    integ_pid=""; rm -f "$SP/claims/INTEGRATING"
   fi
   # TIME IS NOT THE ONLY TRIGGER. A pure 30-minute timer never fires if the dispatcher is restarted
   # more often than that -- which is exactly what happened while tuning: 12 matched functions sat
