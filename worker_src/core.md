@@ -929,6 +929,16 @@ jointly closed OVERGEN16 to MATCH484 with all 11 calls intact. These three edits
 together, so do not attribute the whole change to one edit. Preserve every initialized field and
 the real clear span; do not remove initialization, invent fields or alter a helper's interface.
 
+## GROUPED OBJECT PROOFS — bind sections by index
+
+For grouped source, bind each definition by its symbol's `st_shndx` and each relocation section by
+`sh_info`; section names and offsets need not be unique. Grouped `main:020210f8`, `020211b0` and
+`02022bb0` emit three `.text` sections of184/484/456 bytes. Index-based proof reconstructs all1124
+ROM bytes and54 actual calls; `get_section_by_name('.text')` inspects only one section. Count only
+allocated symbols when checking runtime exports. Give each delink owner one contiguous `.text`
+span: DSD rejects repeated `.text` entries under one file. Completion668 and cancellation456 can
+use separate coherent owners with unchanged bodies. Finish with the whole-module `ninja check`.
+
 ## SIGNED-HALFWORD ROUNDING — retain the narrowing point and store once
 When rounding a signed-halfword member before adding an independent adjustment, keep the rounded
 value in a real `short` local, then perform the final member store once. At `main:0205cc50`,
