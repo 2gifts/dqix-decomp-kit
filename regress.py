@@ -133,6 +133,88 @@ def scaffold_name_regression(scaffold_path, kit_dir, scratch_parent):
             'parser_cases':[name for name,_,_ in cases], 'compiler_invocations':0,
             'fixture_only':True, 'generated_scaffold':generated}
 
+def scaffold_cpp_linkage_regression(scaffold_path, kit_dir, scratch_parent):
+    from pathlib import Path
+    import subprocess
+
+    scaffold_path, kit_dir, scratch_parent = map(Path,(scaffold_path,kit_dir,scratch_parent))
+    scratch_parent.mkdir(parents=True,exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix='scaffold CPP linkage ',dir=scratch_parent) as temporary:
+        root = Path(temporary).resolve()
+        assert root.parent==scratch_parent.resolve()
+        repo, state = root/'repo with spaces',root/'external state'
+        config, source = repo/'config/usa/arm9',repo/'src/Combat/Main'
+        for directory in (config,source,repo/'tools',state):
+            directory.mkdir(parents=True,exist_ok=True)
+        (repo/'tools/configure.py').write_text('MWCC_VERSION="fixture"\nDECOMP_ME_COMPILER="fixture"\n'
+                'CC_FLAGS=""\nCC_INCLUDES=""\nAS_FLAGS=""\nregion_defines="-d usa"\n')
+        symbols = [('sprintf',0x2c,0x02003ce8),
+                   ('_Z15Forward020416c0i',0xc,0x02000020),
+                   ('_Z15Forward020416c0P13State0204166c',0xc,0x020416c0),
+                   ('_Z7UnknownRK13State0204166c',0xc,0x02000040),
+                   ('_ZN4Demo3RunEv',0xc,0x02000060),
+                   ('func_020462d0',0xb0,0x020462d0)]
+        (config/'symbols.txt').write_text(''.join(
+            f'{name} kind:function(arm,size=0x{size:x}) addr:0x{address:08x}\n'
+            for name,size,address in symbols))
+        (config/'delinks.txt').write_text('')
+        (config/'relocs.txt').write_text(
+            'from:0x02046354 kind:arm_call to:0x02003ce8 module:main\n'
+            'from:0x02046358 kind:arm_call to:0x020416c0 module:main\n'
+            'from:0x0204635c kind:arm_call to:0x02000040 module:main\n'
+            'from:0x02046360 kind:arm_call to:0x02000060 module:main\n'
+            'from:0x02046364 kind:arm_call to:0x02100100 module:overlay(17)\n')
+        (source/'Forward020416c0.cpp').write_text(
+            'struct State0204166c;\n'
+            '// USA: func_020416c0\n'
+            'ARM void Forward020416c0(struct State0204166c* s) {}\n')
+        (source/'Unknown.cpp').write_text('// USA: func_02000040\nARM void Unknown(const State0204166c& s) {}\n')
+        overlay_config, overlay_source = config/'overlays/ov017', repo/'src/Combat/Overlay_17'
+        overlay_config.mkdir(parents=True)
+        overlay_source.mkdir(parents=True)
+        (overlay_config/'symbols.txt').write_text('_Z10OverlayFooP13State0204166c kind:function(arm,size=0xc) addr:0x02100100\n')
+        (overlay_config/'delinks.txt').write_text('')
+        (overlay_source/'OverlayFoo.cpp').write_text('// USA: func_ov017_02100100\nARM void OverlayFoo(struct State0204166c* s) {}\n')
+        (source/'sprintf.cpp').write_text(
+            '// USA: func_02003ce8\n'
+            '// The argument list follows the (word-aligned) format address.\n'
+            '// A second comment keeps the definition outside git grep -A2.\n'
+            'extern "C" ARM int sprintf(char* buffer,const char* format,...) {}\n')
+        for command in (['git','init','-q'],['git','add','src']):
+            result = subprocess.run(command,cwd=repo,capture_output=True,text=True,timeout=15)
+            assert result.returncode==0,result.stderr
+        environment = dict(os.environ,DQIX_KIT=str(kit_dir),DQIX_REPO=str(repo),
+                           DQIX_STATE=str(state),DQIX_REGION='usa')
+        environment['PYTHONPATH'] = str(kit_dir)+os.pathsep+environment.get('PYTHONPATH','')
+        result = subprocess.run([sys.executable,str(scaffold_path),'main','020462d0'],
+                cwd=repo,env=environment,capture_output=True,text=True,timeout=30)
+        assert result.returncode==0,result.stderr
+        generated = result.stdout
+        assert 'extern "C" void Forward020416c0();' not in generated,'canonical CPP name emitted with C linkage'
+        assert 'void Forward020416c0(struct State0204166c*);' in generated,'actual nominal CPP signature not retained'
+        assert 'struct State0204166c;' in generated,'canonical nominal type forward missing'
+        assert '_Z15Forward020416c0P13State0204166c' in generated,'authoritative CPP binding missing'
+        assert 'void Forward020416c0(int);' not in generated,'unrelated overload selected by plain name'
+        assert re.search(r'\+0x88\s+Forward020416c0\b',generated),'actual CPP call map spelling lost'
+        assert 'extern "C" void sprintf();' in generated,'C library fallback/linkage changed'
+        assert re.search(r'\+0x84\s+sprintf\b',generated),'actual C library call map lost'
+        assert '// TODO C++ declaration for _Z7UnknownRK13State0204166c;' in generated
+        assert '// TODO C++ declaration for _ZN4Demo3RunEv;' in generated
+        assert 'extern "C" void Unknown();' not in generated
+        assert 'extern "C" void _ZN4Demo3RunEv();' not in generated
+        assert 'void OverlayFoo(struct State0204166c*);' in generated
+        assert '_Z10OverlayFooP13State0204166c' in generated
+        assert 'extern "C" void OverlayFoo();' not in generated
+        return {'compiler_invocations':0,'generated_declarations_and_call_map_verified':True,
+                'configured_address_overload_selected':True,'fixture_only':True}
+
+@check("scaffold preserves configured C++ linkage and supported parameter types",
+       "Forward020416c0's curated State-pointer C++ call was emitted as an extern-C zero-argument alias")
+def _scaffold_cpp_linkage():
+    scaffold_cpp_linkage_regression(f"{KIT}/scaffold.py", KIT, os.path.join(SP, "handwork"))
+    return None
+
+
 @check("scaffold source names reject comments and reset grep groups",
        "sprintf's 'the (word-aligned)' comment replaced its authoritative config name")
 def _scaffold_source_names():

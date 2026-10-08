@@ -8,12 +8,13 @@ tag) gives its real name. Workers currently grep that out one reference at a tim
 produces UNDEF-SYM / RELOC-WRONG, the two gate errors that force a full retry.
 
 None of that needs a model. This emits:
-  * an `extern "C"` declaration for every call target, under its CORRECT current name
+  * declarations for C targets and supported flat C++ targets, under their current names
   * an `extern` declaration for every pool data reference
   * the USA tag, the right ARM/THUMB macro, and a stub with the right symbol name
   * the target disassembly inline, with call sites annotated by callee name
 
-Arg counts and types are NOT derivable and are left as TODO — that is the worker's job.
+C++ parameter types are decoded where supported. Return types and C parameters remain guesses;
+workers must verify the canonical interface before calling any generated declaration.
 
 Usage: python scaffold.py <module> <addr> [outfile]
        python scaffold.py --wave <module>          (scaffold every addr in that module's wave files)
@@ -24,6 +25,7 @@ import kitpaths as _kp
 import re, sys, os, glob, subprocess
 
 import buildcfg
+from symfix import demangle_params
 
 SP = _kp.SP
 KIT = _kp.KIT
@@ -135,18 +137,44 @@ def scaffold(mod, addr):
         seen.add(nm)
         k = SYMS.get(tag, {}).get(to, ('', ''))[1]
         (calls if ('call' in kind or k == 'function') else data).append(
-            (nm, to, frm, (object_size(tag, to), add)))
+            (nm, to, frm, (object_size(tag, to), add, tag)))
 
     L = [f"#include <globaldefs.h>", ""]
     L.append("// AUTO-GENERATED SCAFFOLD (scaffold.py) — every NAME and ADDRESS below is exact, resolved")
-    L.append("// from relocs.txt + symbols.txt. Do NOT re-grep them. Argument counts/types are GUESSES")
-    L.append("// (not derivable) — correct them as you go. Delete anything you end up not calling.")
+    L.append("// from relocs.txt + symbols.txt. C++ parameters are decoded where supported; return types")
+    L.append("// and C parameters are GUESSES. Verify canonical interfaces; delete unused declarations.")
     L.append("")
-    for nm, to, frm, _size in sorted(calls, key=lambda x: x[2]):
-        L.append(f'extern "C" void {nm}();   // called at +0x{frm - a:x}  (0x{to:08x})')
+    forwarded = set()
+    for nm, to, frm, (_size, _add, tag) in sorted(calls, key=lambda x: x[2]):
+        bound = SYMS.get(tag, {}).get(to, (None, None))[0]
+        encoded = re.match(r"^_Z(\d+)(.+)$", bound or "")
+        if encoded:
+            length = int(encoded.group(1))
+            cpp_name, args = encoded.group(2)[:length], encoded.group(2)[length:]
+            try:
+                if cpp_name != nm:
+                    raise ValueError("no verified flat source name")
+                params = demangle_params(args)
+            except ValueError:
+                L.append(f'// TODO C++ declaration for {bound}; verify its canonical interface. '
+                         f'Called at +0x{frm - a:x} (0x{to:08x}).')
+                continue
+            for parameter in params:
+                nominal = re.match(r"struct (\w+)", parameter)
+                if nominal and nominal.group(1) not in forwarded:
+                    L.append(f'struct {nominal.group(1)};')
+                    forwarded.add(nominal.group(1))
+            L.append(f'void {nm}({", ".join(params) if params else "void"});   '
+                     f'// C++ params from {bound}; return type is a GUESS. '
+                     f'Called at +0x{frm - a:x} (0x{to:08x}).')
+        elif bound and bound.startswith("_Z"):
+            L.append(f'// TODO C++ declaration for {bound}; verify its canonical interface. '
+                     f'Called at +0x{frm - a:x} (0x{to:08x}).')
+        else:
+            L.append(f'extern "C" void {nm}();   // called at +0x{frm - a:x}  (0x{to:08x})')
     if data:
         L.append("")
-        for nm, to, frm, (size, add) in sorted(data, key=lambda x: x[2]):
+        for nm, to, frm, (size, add, _tag) in sorted(data, key=lambda x: x[2]):
             offset = f"{add}" if add and add.startswith("-") else (f"+{add}" if add else "")
             extent = f", 0x{size:x} bytes to the next symbol" if size else ""
             L.append(f"extern int {nm};   // pool ref at +0x{frm - a:x}  (0x{to:08x}{offset}{extent})")
