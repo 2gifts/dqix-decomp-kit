@@ -21,8 +21,10 @@ Anything that fails is moved out of src/ to a stage dir so it cannot poison the 
 import os as _kpos, sys as _kpsys
 _kpsys.path.insert(0, _kpos.path.dirname(_kpos.path.abspath(__file__)))
 import kitpaths as _kp
+import bisect
 import glob
 import importlib.util as _ilu
+import itertools
 import os
 import re
 import shutil
@@ -134,10 +136,13 @@ DELINKED = set()
 for _m in re.finditer(r"(?m)^\s*\.\w+\s+start:0x([0-9a-fA-F]+)\s+end:0x[0-9a-fA-F]+(.*)$", delinks):
     if "kind:" not in _m.group(2):
         DELINKED.add(_m.group(1).lower().rjust(8, "0"))
-_spans = [(int(m.group(1), 16), int(m.group(2), 16)) for m in
-          re.finditer(r"(?m)^\s*\.\w+\s+start:0x([0-9a-fA-F]+)\s+end:0x([0-9a-fA-F]+)[ \t]*$", delinks)]
+_spans = sorted((int(m.group(1), 16), int(m.group(2), 16)) for m in
+                re.finditer(r"(?m)^\s*\.\w+\s+start:0x([0-9a-fA-F]+)\s+end:0x([0-9a-fA-F]+)[ \t]*$", delinks))
+_starts = [s for s, _e in _spans]
+_reach = list(itertools.accumulate((e for _s, e in _spans), max))
 for _m in re.finditer(r"(?m)^\S+\s+kind:function\([^)]*\)\s+addr:0x([0-9a-fA-F]+)", symtxt):
-    if any(s <= int(_m.group(1), 16) < e for s, e in _spans):
+    _i = bisect.bisect_right(_starts, int(_m.group(1), 16)) - 1
+    if _i >= 0 and int(_m.group(1), 16) < _reach[_i]:
         DELINKED.add(_m.group(1).lower().rjust(8, "0"))
 
 BASE = min(s for _n, s, _e in ALL_SECTIONS)

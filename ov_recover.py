@@ -132,6 +132,8 @@ def tracked(path):
     if _TRACKED is None:
         # Publish only a successful complete snapshot. Errors leave the cache invalid.
         _TRACKED = read_tracked_paths()
+    if isinstance(path, str) and path.replace("\\", "/") in _TRACKED:
+        return True
     normalized = repo_relative_path(path)
     return normalized is None or normalized in _TRACKED
 

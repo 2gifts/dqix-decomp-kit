@@ -69,7 +69,7 @@ constructs developers would not write; the evo_score penalty).
 | `ov_recover.py` | gather, classify, bisect, cull drift, commit | read in full; preserve-before-delete added |
 | `integrate.py` | wire matched source into `symbols.txt` + `delinks.txt` (+ `relocs.txt` when it defines data) | identical decisions to both retired originals; landed ov026:021d8ba0 in a pre-landing worktree to a green `ninja sha1 check` |
 | `dataown.py` | place a source's own data: derive each section's address from its relocations, prove bytes and relocs, give the range to the file, rename/retire symbols, rewrite interior references as `add:` | `regress.py` replays the 021d8ba0 hand landing exactly and refuses a body static (LOCALREF) and a flipped byte (BYTEDIFF) |
-| `classify.py` | pre-gate verdicts so one bad function cannot red a wave | TRUSTED on two committed matches, SIZE on a mutation |
+| `classify.py` | pre-gate verdicts so one bad function cannot red a wave; SIZE/BYTEDIFF/COMPILE are cached in `wlog/classify_cache.tsv` by source, compiler, flags and committed headers (no cache while `include/` or `libs/` is dirty) | TRUSTED on two committed matches, SIZE on a mutation |
 | `wgate.py` | THE gate: compile, byte-compare, verify relocations | MATCH on a committed function; no longer leaks objects |
 | `buildcfg.py` | the compiler and flags read out of `tools/configure.py`, so no gate can measure on a toolchain the ROM is not built with | prints `2.0/sp2p2` and the build's own flag line |
 | `srcdir.py` | where a module's new work goes, read out of its `delinks.txt` | resolves ov033 to `src/Filesystem/Overlay_33` |
