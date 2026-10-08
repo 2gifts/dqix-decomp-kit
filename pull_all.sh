@@ -30,7 +30,8 @@ SWEEP_EVERY=${SWEEP_EVERY:-3600}              # seconds between repair sweeps (0
 # or names a dead process -- correct on its own -- but an operator restart that deletes the pid file
 # while the old loop is still alive gives you TWO dispatchers, each refilling its own slot. That
 # doubles spend and silently breaks PULL_SLOTS=1. Measured 2026-09-08: two loops ran from 16:59.
-if [ -f "$SP/pull_all.pid" ] && kill -0 "$(cat "$SP/pull_all.pid" 2>/dev/null)" 2>/dev/null; then
+if [ -f "$SP/pull_all.pid" ] && [ "$(cat "$SP/pull_all.pid" 2>/dev/null)" != "$$" ] \
+   && kill -0 "$(cat "$SP/pull_all.pid" 2>/dev/null)" 2>/dev/null; then
   echo "$(date '+%H:%M') another pull_all is alive as $(cat "$SP/pull_all.pid") -- not starting a second" >> "$LOG"
   exit 0
 fi
@@ -49,6 +50,8 @@ last_integrate=$SECONDS
 last_sweep=$SECONDS
 last_state=0                      # 0, not $SECONDS: write STATE.md on the very first loop
 sweep_pid=""
+update_wait=""; update_blocked=""; last_kitcheck=$((SECONDS - 600))
+rm -f "$SP/claims/UPDATE_WAITING"
 
 while :; do
   [ -e "$SP/STOP_PULL" ] && { echo "$(date '+%H:%M') stop flag" >> "$LOG"; break; }
@@ -99,6 +102,17 @@ while :; do
   elif [ -n "$blocker_held" ]; then
     echo "$(date '+%H:%M') blocker class addressed -- claiming resumed" >> "$LOG"; blocker_held=""
   fi
+
+  if [ -z "$update_wait" ] && [ -z "$update_blocked" ] && [ $((SECONDS - last_kitcheck)) -ge 600 ]; then
+    last_kitcheck=$SECONDS
+    _behind=$(python "$KIT/kitpaths.py" behind 2>/dev/null | tr -dc '0-9')
+    if [ "${_behind:-0}" -gt 0 ]; then
+      update_wait=1
+      mkdir -p "$SP/claims"; date > "$SP/claims/UPDATE_WAITING"
+      echo "$(date '+%H:%M') KIT UPDATE WAITING ($_behind commit(s)): no new claims; updating once running work finishes" >> "$LOG"
+    fi
+  fi
+  [ -n "$update_wait" ] && hold_claims=1
 
   for ((s=1; s<=SLOTS; s++)); do
     [ -n "$hold_claims" ] && break
@@ -162,7 +176,7 @@ while :; do
   # only thing that revisits parked work after a new colorsweep rule lands, so it must not depend on
   # an operator remembering. Skipped while an integration holds the wave lock: both want the tree.
   if [ -n "$sweep_pid" ] && ! kill -0 "$sweep_pid" 2>/dev/null; then sweep_pid=""; fi
-  if [ "$SWEEP_EVERY" -gt 0 ] && [ -z "$sweep_pid" ] && [ -z "$integ_pid" ] \
+  if [ "$SWEEP_EVERY" -gt 0 ] && [ -z "$sweep_pid" ] && [ -z "$integ_pid" ] && [ -z "$update_wait" ] \
      && [ $((SECONDS - last_sweep)) -ge "$SWEEP_EVERY" ]; then
     last_sweep=$SECONDS
     echo "$(date '+%H:%M') repair sweep (detached)" >> "$LOG"
@@ -178,6 +192,18 @@ while :; do
   if [ $((SECONDS - last_state)) -ge "${STATE_EVERY:-120}" ]; then
     last_state=$SECONDS
     python "$KIT/progress.py" >/dev/null 2>&1 || true
+  fi
+
+  if [ -n "$update_wait" ] && [ ${#slot_pid[@]} -eq 0 ] && [ -z "$integ_pid" ] && [ -z "$sweep_pid" ]; then
+    python "$KIT/kit_update.py" --dispatcher >> "$LOG" 2>&1
+    case $? in
+      0) echo "$(date '+%H:%M') kit updated -- restarting the dispatcher on the new code" >> "$LOG"
+         rm -f "$SP/claims/UPDATE_WAITING"
+         exec bash "$KIT/pull_all.sh" ;;
+      3) echo "$(date '+%H:%M') KIT UPDATE BLOCKED by local kit changes -- running on, fix with kit_update.py" >> "$LOG"
+         update_blocked=1 ;;
+    esac
+    update_wait=""; rm -f "$SP/claims/UPDATE_WAITING"
   fi
 
   sleep 30

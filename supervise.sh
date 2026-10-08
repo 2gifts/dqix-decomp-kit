@@ -27,8 +27,14 @@ cd "$REPO" || exit 2
 echo $$ > "$SP/supervise.pid"
 trap 'rm -f "$SP/supervise.pid"' EXIT
 echo "=== supervisor up $(date '+%m-%d %H:%M:%S') (pid $$) ===" >> "$LOG"
+SELF_HEAD=$(git -C "$KIT" rev-parse HEAD 2>/dev/null)
 
 while true; do
+  _head=$(git -C "$KIT" rev-parse HEAD 2>/dev/null)
+  if [ -n "$_head" ] && [ "$_head" != "$SELF_HEAD" ]; then
+    echo "$(date '+%m-%d %H:%M:%S') kit moved to ${_head:0:8} -- restarting the supervisor on it" >> "$LOG"
+    exec bash "$KIT/supervise.sh"
+  fi
   if [ -f "$LOCK" ] && kill -0 "$(cat "$LOCK" 2>/dev/null)" 2>/dev/null; then
     sleep 900; continue                      # pull_all alive — nothing to do
   fi

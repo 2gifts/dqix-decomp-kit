@@ -7,6 +7,7 @@
     REPO   the decomp checkout: $DQIX_REPO, else ../dqix-decomp beside the checkout.
 
     python kitpaths.py kit|state|repo     print one of them, for shell scripts
+    python kitpaths.py behind             commits the published kit is ahead of this checkout
 """
 import os
 import sys
@@ -90,6 +91,9 @@ if os.environ.get("DQIX_NO_FRESHNESS") != "1":
 
 if __name__ == "__main__":
     which = sys.argv[1] if len(sys.argv) > 1 else ""
-    if which not in ("kit", "state", "repo"):
+    if which == "behind":
+        print(behind())
+    elif which in ("kit", "state", "repo"):
+        print({"kit": KIT, "state": SP, "repo": REPO}[which])
+    else:
         sys.exit(__doc__)
-    print({"kit": KIT, "state": SP, "repo": REPO}[which])

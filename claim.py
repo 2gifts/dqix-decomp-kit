@@ -511,6 +511,8 @@ def main():
         if subprocess.run([sys.executable, os.path.join(KIT, gate)],
                           capture_output=True).returncode != 0:
             return 0
+    if os.path.exists(os.path.join(SP, "claims", "UPDATE_WAITING")) and "pull_all.pid" in _kp.busy():
+        return 0
     stale = _kp.behind()
     if stale and not _kp.busy():
         print(_kp.stale_message(stale) + "; no new work is served until then", file=sys.stderr)

@@ -2,6 +2,7 @@
 
     python kit_update.py           at the start of every session and every time you stop
     python kit_update.py --hook    the same, as a Claude Code Stop hook (.claude/settings.json)
+    python kit_update.py --dispatcher   from pull_all.sh once its slots have drained
 
 Exit 0: up to date, or updated (then kit_init.py has run). 1: the fetch or kit_init.py failed; the
 kit is unchanged or needs the FAIL lines fixed. 2: a fleet or an integration is running, so nothing
@@ -27,6 +28,7 @@ BRANCH = kitpaths.KIT_BRANCH
 INSTRUCTIONS = ("AGENTS.md", "CLAUDE.md", ".claude/skills/", ".claude/workflows/", "worker_src/")
 SLOW_TRIGGERS = ("colorsweep.py", "wdiff.py", "wgate.py", "regress.py", "regress_fixtures/")
 HOOK = "--hook" in sys.argv
+DISPATCHER = "--dispatcher" in sys.argv
 
 
 def say(text):
@@ -46,7 +48,7 @@ def update():
     if behind == 0:
         say("kit up to date")
         return 0, [], True
-    busy = kitpaths.busy()
+    busy = [b for b in kitpaths.busy() if not (DISPATCHER and b == "pull_all.pid")]
     if busy:
         say(f"UPDATE WAITING: {behind} commit(s); {', '.join(busy)} present. A running bash script "
             "must never be rewritten under it: stop the fleet (touch STOP_PULL FLEET_STOPPED, "

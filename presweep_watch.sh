@@ -17,7 +17,8 @@ EVERY="${1:-600}"
 LOG="$SP/wlog/presweep_watch.log"
 # REFUSE TO BE THE SECOND COPY. Every relaunch without this stacks another loop on the same queue:
 # three accumulated in one minute of restarts, all sweeping the same addresses.
-if [ -f "$SP/presweep_watch.pid" ] && kill -0 "$(cat "$SP/presweep_watch.pid" 2>/dev/null)" 2>/dev/null; then
+if [ -f "$SP/presweep_watch.pid" ] && [ "$(cat "$SP/presweep_watch.pid" 2>/dev/null)" != "$$" ] \
+   && kill -0 "$(cat "$SP/presweep_watch.pid" 2>/dev/null)" 2>/dev/null; then
   echo "$(date '+%H:%M') already running as $(cat "$SP/presweep_watch.pid") -- not starting a second" >> "$LOG"
   exit 0
 fi
@@ -25,9 +26,15 @@ echo "=== presweep_watch up $(date '+%m-%d %H:%M:%S') (pid $$, every ${EVERY}s) 
 echo $$ > "$SP/presweep_watch.pid"
 trap 'rm -f "$SP/presweep_watch.pid"' EXIT
 cd "$REPO" || exit 2
+SELF_HEAD=$(git -C "$KIT" rev-parse HEAD 2>/dev/null)
 
 while :; do
   [ -e "$SP/STOP_PULL" ] && { echo "$(date '+%H:%M') stop flag" >> "$LOG"; break; }
+  _head=$(git -C "$KIT" rev-parse HEAD 2>/dev/null)
+  if [ -n "$_head" ] && [ "$_head" != "$SELF_HEAD" ]; then
+    echo "$(date '+%H:%M') kit moved to ${_head:0:8} -- restarting on it" >> "$LOG"
+    exec bash "$KIT/presweep_watch.sh" "$EVERY"
+  fi
   for _mod in $(python "$KIT/claim.py" --pools 2>/dev/null | awk '{print $1}' | head -4); do
     _marg="$_mod"; [ "$_mod" = "main" ] || _marg="$_mod"
     for _a in $(python "$KIT/claim.py" "$_mod" --peek "${PRESWEEP_AHEAD:-4}" 2>/dev/null \
