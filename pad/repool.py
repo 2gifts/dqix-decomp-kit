@@ -8,6 +8,7 @@ import re
 import subprocess
 import sys
 from collections import Counter
+from buildcfg import config_dir
 
 REPO = _kp.REPO
 SP = _kp.SP
@@ -18,7 +19,7 @@ SYM = re.compile(r"(\S+) kind:(\w+)\S* addr:0x([0-9a-fA-F]{8})")
 TAG = re.compile(r"\s*//\s*(?:SCRATCH-)?USA:")
 KEYWORD = {"return", "if", "while", "for", "switch", "else", "do", "case", "sizeof", "goto"}
 BUILTIN = {"unsigned", "signed", "char", "short", "int", "long", "void", "float", "double", "bool"}
-DECL = re.compile(r"^\s*(?:extern\s+(?:\"C\"\s+)?)?(?:static\s+|inline\s+)*"
+DECL = re.compile(r"^\s*(?:extern\s+(?:\"C(?:\+\+)?\"\s+)?)?(?:static\s+|inline\s+)*"
                   r"([A-Za-z_][\w\s\*&:<>]*?[\s\*&])([A-Za-z_]\w*)\s*\(([^;{}]*)\)\s*([;{])")
 
 
@@ -29,7 +30,7 @@ def git(*args):
 
 def functions(rev):
     out = {}
-    for path in git("ls-tree", "-r", "--name-only", rev, "config/usa/arm9").split():
+    for path in git("ls-tree", "-r", "--name-only", rev, config_dir("main")).split():
         if path.endswith("symbols.txt"):
             m = re.search(r"/ov(\d+)/", path)
             for line in git("show", "%s:%s" % (rev, path)).splitlines():
@@ -62,21 +63,19 @@ def type_names(texts):
 
 
 def signatures(text, top_level_only=False):
-    """Use the shared lexical filter for declarations and ordinary flat definitions."""
     from scaffold import _code_without_comments
     in_block = False
     depth = 0
     for raw in text.splitlines():
-        code, in_block = _code_without_comments(raw, in_block)
+        code, in_block = _code_without_comments(raw, in_block, keep_linkage=True)
         match = DECL.match(code)
         if match and (not top_level_only or depth == 0) and match.group(1).strip().split()[-1].strip("*&") not in KEYWORD:
             yield (match.group(1).strip(), match.group(2), match.group(3).strip(),
-                   match.group(4), not re.search(r'\bextern\s+"C"', raw))
+                   match.group(4), not re.search(r'\bextern\s*"C"', code))
         depth += code.count("{") - code.count("}")
 
 
 def matches_cpp_parameters(parameters, symbol):
-    """Fail closed on unsupported encodings/types; use the shared mangled decoder."""
     from symfix import demangle_params, split_args
     encoded = re.fullmatch(r"_Z(\d+)(.+)", symbol)
     if not encoded:
@@ -101,13 +100,21 @@ def matches_cpp_parameters(parameters, symbol):
     return True
 
 
+def declared_cpp_bindings(texts, candidates):
+    declarations = {}
+    for text in texts:
+        for row in signatures(text, top_level_only=True):
+            if row[3] == ";" and row[1] in candidates:
+                declarations.setdefault(row[1], []).append(row)
+    return {name: candidates[name] for name, rows in declarations.items()
+            if all(row[4] and matches_cpp_parameters(row[2], candidates[name]) for row in rows)}
+
+
 def canonical_declaration(text, name, symbol):
-    declarations = [row for row in signatures(text, top_level_only=True) if row[1] == name and row[3] == ";"]
-    return bool(declarations) and all(row[4] and matches_cpp_parameters(row[2], symbol) for row in declarations)
+    return declared_cpp_bindings((text,), {name: symbol}).get(name) == symbol
 
 
 def source_cpp_bindings(rev, current, candidates):
-    """Prove only configured flat signatures in complete current source owners, in two batches."""
     import io
     import tarfile
     from union_merge import parse_delinks, block_range
@@ -125,7 +132,7 @@ def source_cpp_bindings(rev, current, candidates):
     needed = [(module, address, symbol) for (module, address), symbol in current.items()
               if candidates.get(plain(symbol)) == symbol]
     owned = {}
-    for path, text in archive(["config/usa/arm9"]).items():
+    for path, text in archive([config_dir("main")]).items():
         if not path.endswith("delinks.txt"):
             continue
         overlay = re.search(r"/ov(\d+)/", path)
@@ -185,7 +192,6 @@ def definition(text, t):
 def build(rev):
     old, new = functions(rev), functions("HEAD")
     oh, nh = headers(rev), headers("HEAD")
-    current_cpp = prototypes(nh.values())
     ren = {old[k]: new[k] for k in old if k in new and old[k] != new[k]}
     spell = dict(ren)
     byplain = {}
@@ -195,12 +201,13 @@ def build(rev):
             byplain.setdefault(p, set()).add(n)
     source_candidates = {p: next(iter(ns)) for p, ns in byplain.items()
                          if len(ns) == 1 and plain(next(iter(ns))) == p}
+    current_cpp = declared_cpp_bindings(nh.values(), source_candidates)
     source_cpp = source_cpp_bindings("HEAD", new, source_candidates)
     current = set(new.values())
     for p, ns in byplain.items():
         if len(ns) == 1 and p not in current:
             n = next(iter(ns))
-            if p not in current_cpp or plain(n) != p:
+            if current_cpp.get(p) != n or plain(n) != p:
                 spell.setdefault(p, n)
     changed = [p for p in oh if oh[p] != nh.get(p)]
     protos = prototypes(oh[p] for p in changed)
@@ -250,8 +257,8 @@ def rewrite(text, cxx, spell, protos, gone, moved, defs, source_cpp=None):
     orig = text
     for o, n in moved.items():
         text = re.sub(r'(#\s*include\s*[<"])%s([>"])' % re.escape(o), r"\g<1>%s\2" % n, text)
-    protected = {name for name, symbol in (source_cpp or {}).items()
-                 if cxx and canonical_declaration(text, name, symbol)}
+    present = {name: symbol for name, symbol in (source_cpp or {}).items() if name in text} if cxx else {}
+    protected = declared_cpp_bindings((text,), present) if present else {}
     spell = {old: new for old, new in spell.items() if old not in protected}
     if not spell:
         return text, ("includes" if text != orig else None)

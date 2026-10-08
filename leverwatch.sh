@@ -5,7 +5,6 @@ ONCE=0
 [ "$1" = "--once" ] && { ONCE=1; shift; }
 INTERVAL="${1:-300}"
 SEEN="${LEVERWATCH_SEEN:-$SP/wlog/leverwatch_seen.txt}"
-# A bounded observation is useful for tests and one-off checks; zero watches indefinitely.
 MAX_CYCLES="${LEVERWATCH_MAX_CYCLES:-0}"
 CYCLES=0
 touch "$SEEN"

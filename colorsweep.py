@@ -24,6 +24,7 @@ import kitpaths as _kp
 import hashlib
 import itertools
 from functools import lru_cache
+from types import MappingProxyType
 import os
 import re
 import subprocess
@@ -193,11 +194,24 @@ def _scope_code(text):
     return "".join(chars)
 
 
-def _scope_function_header(header):
-    """Recognize ordinary free/out-of-class definitions, never lambdas/initializers."""
-    if "=" in header or "[" in header or ";" in header:
+def _scope_function_header(header, owner=None):
+    if ";" in header:
         return False
-    m = re.fullmatch(r"([\w\s:*&]+?)([A-Za-z_]\w*(?:::[A-Za-z_]\w*)*)"
+    if owner:
+        header = re.sub(r"^(?:(?:public|private|protected)\s*:\s*)+", "", header)
+        member = re.fullmatch(r"(?:(?:ARM|THUMB|inline|explicit|virtual)\s+)*"
+                             r"(~?[A-Za-z_]\w*)\s*\((.*)\)\s*", header, re.S)
+        if member and member.group(1).lstrip("~") == owner:
+            return True
+    header = re.sub(r"^template\s*<[\w\s,:=*&]+>\s*", "", header)
+    special = re.fullmatch(r"(?:(?:ARM|THUMB|inline)\s+)*"
+                          r"((?:[A-Za-z_]\w*::)+)(~?[A-Za-z_]\w*)"
+                          r"\s*\((.*)\)\s*", header, re.S)
+    if special:
+        return special.group(2).lstrip("~") == special.group(1).rstrip(":").split("::")[-1]
+    name = (r"(?:[A-Za-z_]\w*::)*(?:[A-Za-z_]\w*|operator\s*"
+            r"(?:\(\)|\[\]|new(?:\[\])?|delete(?:\[\])?|[-+*/%&|^~!=<>]+))")
+    m = re.fullmatch(r"([\w\s:*&<>,]+?)(" + name + r")"
                      r"\s*\((.*)\)\s*(?:const\s*)?", header, re.S)
     if not m or not (m.group(1)[-1].isspace() or m.group(1)[-1] in "*&") or \
             m.group(2) in ("if", "while", "for", "switch", "catch"):
@@ -205,17 +219,24 @@ def _scope_function_header(header):
     return not re.search(r"\b(?:namespace|typedef|using)\b", m.group(1))
 
 
+def _scope_class_name(header):
+    header = re.sub(r"^template\s*<[\w\s,:=*&]+>\s*", "", header)
+    match = re.fullmatch(r"(?:class|struct|union)\s+(?:[A-Za-z_]\w*::)*([A-Za-z_]\w*)"
+                         r"(?:\s*:\s*[\w\s:,<>]+)?", header, re.S)
+    return match.group(1) if match else None
+
+
 @lru_cache(maxsize=8)
 def _local_scopes(text):
     """Map complete code lines to (block opening line, function opening line).
 
     This is a conservative scope recognizer, not a C++ parser. Only recognized function
-    bodies and their ordinary control/bare blocks qualify. Aggregate/enum/lambda/initializer
-    bodies (including local classes) are opaque. Parameters are outside those scopes.
+    bodies and their statement blocks qualify. Class fields, enum/lambda/initializer bodies
+    and parameters remain opaque; recognized member bodies have their own function scope.
     """
     code = _scope_code(text)
     if code is None:
-        return {}, {}
+        return MappingProxyType({}), MappingProxyType({})
     original = text.split("\n")
     masked = code.split("\n")
     stack, scopes, bounds = [], {}, {}
@@ -247,22 +268,28 @@ def _local_scopes(text):
             invalid_lines.add(line)
             header = code[segment:offset].strip()
             outer = current[0] if current else None
-            if not parens and not brackets and outer in (None, "namespace") and _scope_function_header(header):
-                kind, function = "function", line
+            owner = current[3] if current and outer == "class" else None
+            class_name = _scope_class_name(header) if not parens and not brackets else None
+            if not parens and not brackets and outer in (None, "namespace", "class") and \
+                    _scope_function_header(header, owner):
+                kind, function, class_name = "function", line, None
+            elif class_name and outer in (None, "namespace", "class", "function", "block"):
+                kind, function = "class", None
             elif not parens and not brackets and outer in (None, "namespace") and \
                     (re.fullmatch(r"(?:inline\s+)?namespace(?:\s+[\w:]+)?", header) or header == "extern"):
                 kind, function = "namespace", None
             elif not parens and not brackets and outer in ("function", "block") and \
-                    (not header or re.match(r"^(?:if|else|for|while|switch|do|try|catch)\b", header)):
+                    (not header or re.match(r"^(?:if|else|for|while|switch|do|try|catch)\b", header) or
+                     re.fullmatch(r"(?:case\b[^:]*|default|[A-Za-z_]\w*)\s*:", header, re.S)):
                 kind, function = "block", current[2]
             else:
                 kind, function = "opaque", None
-            stack.append((kind, line, function))
+            stack.append((kind, line, function, class_name))
             segment = offset + 1
         elif char == "}":
             invalid_lines.add(line)
             if not stack:
-                return {}, {}
+                return MappingProxyType({}), MappingProxyType({})
             closed = stack.pop()
             if closed[0] == "function":
                 bounds[closed[1]] = line
@@ -277,19 +304,17 @@ def _local_scopes(text):
                 invalid_lines.update(range(first, line + 1))
             segment = offset + 1
         if parens < 0 or brackets < 0:
-            return {}, {}
+            return MappingProxyType({}), MappingProxyType({})
     if stack or parens or brackets:
-        return {}, {}
+        return MappingProxyType({}), MappingProxyType({})
     for i, contexts in line_contexts.items():
-        # Do not rewrite a line containing any comment/string/macro payload, either.
         if i not in invalid_lines and len(contexts) == 1 and original[i] == masked[i] and \
                 not _is_unbraced_body(masked, i):
             scopes[i] = next(iter(contexts))
-    return scopes, bounds
+    return MappingProxyType(scopes), MappingProxyType(bounds)
 
 
 def _body_lines(text):
-    """Complete code lines in recognized local scopes, excluding headers and type fields."""
     return list(_local_scopes(text)[0])
 
 
@@ -624,7 +649,6 @@ def r11_decl_to_function_scope(text):
     scopes, bounds = _local_scopes(text)
     out = []
     for body, end in bounds.items():
-        # Only this function's leading local declaration run supplies insertion slots.
         slots, k = [body + 1], body + 1
         while k < end and scopes.get(k) == (body, body) and (DECL.match(lines[k]) or BAREDECL.match(lines[k])):
             k += 1
@@ -634,7 +658,6 @@ def r11_decl_to_function_scope(text):
             if not m or i not in scopes or scopes[i][1] != body:
                 continue
             indent, typ, name, expr = m.groups()
-            # Leave the assignment in place, including casts/calls. Only the declaration moves.
             if not lines[i].startswith(indent + typ.split()[0]):
                 continue
             decl = "    %s%s;" % (typ, name)

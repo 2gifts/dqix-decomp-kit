@@ -45,8 +45,7 @@ for p in glob.glob(f"{REPO}/{buildcfg.config_dir('main')}/**/symbols.txt", recur
         if os.path.exists(dl) else []
     BOUNDS[tag] = sorted(set(table) | set(ends))
 
-def _code_without_comments(line, in_block):
-    """Drop C++ comments and quoted text without joining surrounding tokens."""
+def _code_without_comments(line, in_block, keep_linkage=False):
     parts, pos = [], 0
     tokens = re.compile(r'//|/\*|"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'')
     while pos < len(line):
@@ -63,7 +62,7 @@ def _code_without_comments(line, in_block):
         parts.append(line[pos:token.start()])
         if token.group() == "//":
             break
-        parts.append(" ")
+        parts.append(token.group() if keep_linkage and token.group() in ('"C"', '"C++"') else " ")
         if token.group() == "/*":
             in_block = True
         pos = token.end()
@@ -71,7 +70,6 @@ def _code_without_comments(line, in_block):
 
 
 def c_names_from_grep(output):
-    """Resolve declarations only inside the USA tag's git-grep context group."""
     names, cur, in_block = {}, None, False
     for line in output.splitlines():
         if line.strip() == "--":
@@ -144,7 +142,7 @@ def scaffold(mod, addr):
     L.append("// from relocs.txt + symbols.txt. C++ parameters are decoded where supported; return types")
     L.append("// and C parameters are GUESSES. Verify canonical interfaces; delete unused declarations.")
     L.append("")
-    forwarded = set()
+    forwarded, resolved_names = set(), {}
     for nm, to, frm, (_size, _add, tag) in sorted(calls, key=lambda x: x[2]):
         bound = SYMS.get(tag, {}).get(to, (None, None))[0]
         encoded = re.match(r"^_Z(\d+)(.+)$", bound or "")
@@ -152,13 +150,14 @@ def scaffold(mod, addr):
             length = int(encoded.group(1))
             cpp_name, args = encoded.group(2)[:length], encoded.group(2)[length:]
             try:
-                if cpp_name != nm:
+                if nm not in (cpp_name, bound):
                     raise ValueError("no verified flat source name")
                 params = demangle_params(args)
-            except ValueError:
+            except (ValueError, IndexError):
                 L.append(f'// TODO C++ declaration for {bound}; verify its canonical interface. '
                          f'Called at +0x{frm - a:x} (0x{to:08x}).')
                 continue
+            nm = resolved_names[frm] = cpp_name
             for parameter in params:
                 nominal = re.match(r"struct (\w+)", parameter)
                 if nominal and nominal.group(1) not in forwarded:
@@ -184,7 +183,7 @@ def scaffold(mod, addr):
     # 11.6k tokens, more than double the worker doc — and the worker already fetches the listing with
     # the documented grep. Emit only the CALL MAP: offset -> the callee's correct current name, which
     # is the part they cannot derive. SCAFFOLD_ASM=1 restores the full listing if ever needed.
-    byaddr = {f: (nm, to) for nm, to, f, _size in calls + data}
+    byaddr = {f: (resolved_names.get(f, nm), to) for nm, to, f, _size in calls + data}
     if byaddr:
         L.append("/* CALL MAP (offset -> resolved name; listing via the grep in the worker doc)")
         for f in sorted(byaddr):

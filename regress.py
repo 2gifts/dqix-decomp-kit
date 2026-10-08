@@ -85,13 +85,11 @@ def scaffold_name_regression(scaffold_path, kit_dir, scratch_parent):
         (config/'relocs.txt').write_text(
             'from:0x020681b8 kind:arm_call to:0x02003ce8 module:main\n'
             'from:0x020681f8 kind:arm_call to:0x02067f5c module:main\n')
-        # The actual three-line git grep -A2 window from the committed sprintf owner.
         (source_dir/'sprintf.cpp').write_text(
             '// USA: func_02003ce8\n'
             '// The `...` makes mwccarm home r0-r3 on entry; the argument list then starts one\n'
             '// word past the (word-aligned) address of `fmt`, which is what the ROM computes.\n'
             'extern "C" ARM int sprintf(char* buffer, const char* format, ...) {}\n')
-        # A genuine nearby definition must still supply its source name.
         (source_dir/'ToUpperBounded.cpp').write_text(
             '// USA: func_02067f5c\nARM void ToUpperBounded(signed char* s, int count) {}\n')
         for command in (['git','init','-q'], ['git','add','src']):
@@ -110,7 +108,6 @@ def scaffold_name_regression(scaffold_path, kit_dir, scratch_parent):
         assert 'extern "C" void ToUpperBounded();' in generated, 'genuine definition no longer resolves'
         assert re.search(r'\+0x5c\s+ToUpperBounded\b',generated), 'genuine definition missing from call map'
 
-    # Execute the production parser functions, not a second implementation of the fix.
     tree = ast.parse(scaffold_path.read_text())
     functions = [node for node in tree.body if isinstance(node, ast.FunctionDef)
                  and node.name in ('_code_without_comments','c_names_from_grep')]
@@ -153,6 +150,8 @@ def scaffold_cpp_linkage_regression(scaffold_path, kit_dir, scratch_parent):
                    ('_Z15Forward020416c0P13State0204166c',0xc,0x020416c0),
                    ('_Z7UnknownRK13State0204166c',0xc,0x02000040),
                    ('_ZN4Demo3RunEv',0xc,0x02000060),
+                   ('_Z13MissingSourceP13State0204166c',0xc,0x02000070),
+                   ('_Z9Malformed1',0xc,0x02000080),
                    ('func_020462d0',0xb0,0x020462d0)]
         (config/'symbols.txt').write_text(''.join(
             f'{name} kind:function(arm,size=0x{size:x}) addr:0x{address:08x}\n'
@@ -163,12 +162,15 @@ def scaffold_cpp_linkage_regression(scaffold_path, kit_dir, scratch_parent):
             'from:0x02046358 kind:arm_call to:0x020416c0 module:main\n'
             'from:0x0204635c kind:arm_call to:0x02000040 module:main\n'
             'from:0x02046360 kind:arm_call to:0x02000060 module:main\n'
-            'from:0x02046364 kind:arm_call to:0x02100100 module:overlay(17)\n')
+            'from:0x02046364 kind:arm_call to:0x02100100 module:overlay(17)\n'
+            'from:0x02046368 kind:arm_call to:0x02000070 module:main\n'
+            'from:0x0204636c kind:arm_call to:0x02000080 module:main\n')
         (source/'Forward020416c0.cpp').write_text(
             'struct State0204166c;\n'
             '// USA: func_020416c0\n'
             'ARM void Forward020416c0(struct State0204166c* s) {}\n')
         (source/'Unknown.cpp').write_text('// USA: func_02000040\nARM void Unknown(const State0204166c& s) {}\n')
+        (source/'Malformed.cpp').write_text('// USA: func_02000080\nARM void Malformed(int value) {}\n')
         overlay_config, overlay_source = config/'overlays/ov017', repo/'src/Combat/Overlay_17'
         overlay_config.mkdir(parents=True)
         overlay_source.mkdir(parents=True)
@@ -205,6 +207,12 @@ def scaffold_cpp_linkage_regression(scaffold_path, kit_dir, scratch_parent):
         assert 'void OverlayFoo(struct State0204166c*);' in generated
         assert '_Z10OverlayFooP13State0204166c' in generated
         assert 'extern "C" void OverlayFoo();' not in generated
+        assert 'void MissingSource(struct State0204166c*);' in generated
+        assert re.search(r'\+0x98\s+MissingSource\b',generated)
+        assert '// TODO C++ declaration for _Z13MissingSourceP13State0204166c;' not in generated
+        assert 'extern "C" void _Z13MissingSourceP13State0204166c();' not in generated
+        assert '// TODO C++ declaration for _Z9Malformed1;' in generated
+        assert 'void Malformed(' not in generated
         return {'compiler_invocations':0,'generated_declarations_and_call_map_verified':True,
                 'configured_address_overload_selected':True,'fixture_only':True}
 
@@ -224,7 +232,7 @@ def _scaffold_source_names():
 
 
 
-def repool_cpp_regression(repool_path, scratch_parent):
+def repool_cpp_regression(repool_path, scratch_parent, region="usa"):
     import importlib.util
     from pathlib import Path
     import subprocess
@@ -238,7 +246,7 @@ def repool_cpp_regression(repool_path, scratch_parent):
     with tempfile.TemporaryDirectory(prefix='repool cpp ', dir=scratch_parent) as temporary:
         repo = Path(temporary).resolve()
         assert repo.parent == scratch_parent
-        config = repo/'config/usa/arm9'
+        config = repo/('config/' + region + '/arm9')
         includes = repo/'include'
         config.mkdir(parents=True)
         (includes/'GameState').mkdir(parents=True)
@@ -299,6 +307,7 @@ def repool_cpp_regression(repool_path, scratch_parent):
         git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid',
             'commit', '-qm', 'current interfaces')
         repool.REPO = str(repo)
+        repool.config_dir = lambda module: 'config/' + region + '/arm9'
         migration = repool.build(old_rev)
         spell, protos, gone, moved, defs = migration[:5]
         source_cpp = migration[5] if len(migration) == 6 else {}
@@ -309,7 +318,6 @@ def repool_cpp_regression(repool_path, scratch_parent):
         assert repaired == canonical, 'canonical current C++ spelling was rewritten: ' + str(what)
         assert 'GetCombatantWithFlag0x100' not in spell
 
-        # Direct old-mangled ABI repairs must remain available after suppressing a plain alias.
         assert spell[old_names[0]] == new_names[0]
         legacy = ('// USA: func_02000024\n'
                   'void Legacy(BattleStruct* state) { ' + old_names[0] + '(state, 0); }\n')
@@ -318,14 +326,11 @@ def repool_cpp_regression(repool_path, scratch_parent):
         assert 'extern "C" CombatantStruct* ' + new_names[0] in repaired
         assert 'struct BattleStruct {' in repaired and 'struct CombatantStruct {' in repaired
 
-        # An unrelated current declaration must not protect a source name that really changed.
         assert spell['OldHelper'] == new_names[1]
         stale = '// USA: func_02000028\nvoid Stale(BattleStruct* state) { OldHelper(state); }\n'
         repaired, what = repool.rewrite(stale, True, *migration)
         assert repaired is not None and new_names[1] in repaired and 'OldHelper(state)' not in repaired
-        # No current declaration: retain the original conservative migration behavior.
         assert spell['Headerless'] == new_names[2]
-        # Source-only guard: the actual complete owner matches the current encoded nominal ABI.
         source_canonical = ('// USA: func_02000030\n'
                             'int GetField0x3b0Value(GameState* state);\n'
                             'void Canonical(GameState* state) { GetField0x3b0Value(state); }\n')
@@ -345,6 +350,24 @@ def repool_cpp_regression(repool_path, scratch_parent):
         explicit = '// USA: func_02000034\nvoid Explicit(BattleStruct* state) { ' + old_names[3] + '(state); }\n'
         repaired, what = repool.rewrite(explicit, True, *migration)
         assert repaired is not None and new_names[3] in repaired, 'source guard disabled old-mangled repairs'
+        current_header = includes/'Combat/Main/BattleList.h'
+        original_header = current_header.read_text()
+        declaration = 'GameObject* GetCombatantWithFlag0x100(GameState* state, int id);'
+        for wrong in ('extern "C" ' + declaration,
+                      'extern /* preserve linkage */ "C" ' + declaration,
+                      declaration.replace('GameState*', 'BattleStruct*'),
+                      declaration + '\nGameObject* GetCombatantWithFlag0x100(int unrelated);'):
+            current_header.write_text(original_header.replace(declaration, wrong))
+            git('add', '.')
+            git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid',
+                'commit', '-qm', 'noncanonical current declaration')
+            assert repool.build(old_rev)[0].get('GetCombatantWithFlag0x100') == new_names[0], wrong
+        for linkage in ('extern "C++" ', 'extern /* preserve linkage */ "C++" '):
+            current_header.write_text(original_header.replace(declaration, linkage + declaration))
+            git('add', '.')
+            git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid',
+                'commit', '-qm', 'explicit canonical C++ linkage')
+            assert 'GetCombatantWithFlag0x100' not in repool.build(old_rev)[0], linkage
         return {'canonical_spelling_retained': True, 'transitive_current_header_fixture': True,
                 'old_mangled_abi_repair_retained': True, 'old_type_definitions_retained': True,
                 'genuinely_renamed_source_spelling_repaired': True,
@@ -356,7 +379,41 @@ def repool_cpp_regression(repool_path, scratch_parent):
 @check("repool retains current declared C++ spellings",
        "GetCombatantWithFlag0x100 was converted to a mangled alias despite its current shared API")
 def _repool_current_cpp_names():
-    repool_cpp_regression(f"{KIT}/pad/repool.py", os.path.join(SP, "handwork"))
+    for region in ("usa", "jpn"):
+        repool_cpp_regression(f"{KIT}/pad/repool.py", os.path.join(SP, "handwork"), region)
+    return None
+
+
+@check("importing the union parser never dispatches the caller's CLI arguments",
+       "repool --apply imported union_merge, which ran git show :2:--apply")
+def _union_parser_import():
+    import runpy
+    import subprocess
+    from unittest.mock import patch
+    with patch.object(sys, "argv", ["repool.py", "--apply", "--rev", "X"]), \
+         patch.object(subprocess, "run", side_effect=AssertionError("CLI operation on import")):
+        parser = runpy.run_path(f"{KIT}/union_merge.py", run_name="_union_parser_probe")
+    assert callable(parser["parse_delinks"]) and callable(parser["merge_symbols"])
+    return None
+
+
+@check("repool lexes a source once even when hundreds of absent C++ names are configured",
+       "the canonical source guard rescanned the whole file once per source-backed symbol")
+def _repool_single_lex():
+    from unittest.mock import patch
+    repool = load("pad/repool")
+    names = {"First": "_Z5FirstP3New", "Second": "_Z6SecondP3New"}
+    names.update({"Absent" + str(i): "_Z6AbsentP3New" for i in range(300)})
+    source = "int First(New* p);\nint Second(New* p);\nvoid Worker(New* p) { First(p); Second(p); }\n"
+    scans = []
+    original = repool.signatures
+    def count(*args, **keywords):
+        scans.append(args[0])
+        yield from original(*args, **keywords)
+    with patch.object(repool, "signatures", side_effect=count):
+        repaired, _ = repool.rewrite(source, True, {"First": names["First"], "Second": names["Second"]},
+                                    {}, set(), {}, {}, names)
+    assert repaired == source and len(scans) == 1, len(scans)
     return None
 
 
@@ -1285,7 +1342,6 @@ def _levercheck_boards():
         return "leverwatch --once did not fire exactly once on 02011111: %r" % first.stdout[:200]
     # Bound the observation without timing out an infinite MSYS shell. On Windows,
     # descendants can keep its captured pipes open after subprocess.run kills it.
-    # Count real checker calls to prove --once keeps watching after a seen lever.
     bindir = os.path.join(d, "bin")
     os.makedirs(bindir)
     wrapper = os.path.join(bindir, "python")
@@ -1428,13 +1484,10 @@ def _r4_same_type():
 
 
 def colorsweep_local_scope_regression(C):
-    """Portable controls for the real BackupDeviceSpec declswap@20 layout defect."""
     rules = (C.r3_postinc_migrate, C.r4_decl_reorder, C.r5_stmt_swap,
              C.r7_decl_split, C.r8_decl_hoist, C.r10_const_local,
              C.r11_decl_to_function_scope, C.r12_zero_accumulator,
              C.r14_decl_move, C.r16_stmt_move, C.r17_decl_permute)
-    # The first pair is the exact field/type pair moved in main020d0078. The other
-    # members exercise the initialized-declaration move/permutation rules too.
     members = ('    unsigned int erasePageTime;\n'
                '    unsigned char initialStatus;\n'
                '    int a = 1;\n    int b = 2;\n    int c = 3;\n')
@@ -1450,14 +1503,19 @@ def colorsweep_local_scope_regression(C):
         "continued macro": '#define FAKE() void fake() { \\\n    int a = 1; \\\n    int b = 2; }\n',
         "unfinished scope": 'void f() {\n' + members,
         "conditional scope": '#if FLAG\nvoid f() {\n' + members + '}\n#endif\n',
+        "lambda body": 'void f() {\n    auto callback = []() {\n'
+                       '        int a = 1;\n        int b = 2;\n        int c = 3;\n'
+                       '        return a+b+c;\n    };\n}\n',
+        "initialized aggregate": 'struct Native {\n    unsigned int erasePageTime;\n'
+                                 '    unsigned char initialStatus;\n};\n'
+                                 'Native backup = {\n    1,\n    2\n};\n',
+        "initialized array": 'unsigned int table[2] = {\n    1,\n    2\n};\n',
     }
     for name, text in negatives.items():
         for rule in rules:
             got = rule(text)
             if got:
                 return "%s changed %s (%s)" % (rule.__name__, name, got[0][0])
-    # Braced nested locals, ordinary multiline definitions, namespaces and multiple
-    # functions still qualify. Strings/comments containing braces must not hide them.
     run = '    int a = 1;\n    int b = 2;\n    int c = 3;\n'
     positives = {
         "ordinary locals": 'ARM int f()\n{\n' + run + '    return a+b+c;\n}\n',
@@ -1465,19 +1523,87 @@ def colorsweep_local_scope_regression(C):
         "namespace function": 'namespace N {\nint f() {\n' + run + '}\n}\n',
         "quoted braces": '/* { } */\nint f() {\n    const char* s = "{ }";\n' + run + '}\n',
         "raw braces": 'int f() {\n    const char* s = R"x(\n{ }\n)x";\n' + run + '}\n',
+        "case block": 'void f(int value) {\n    switch (value) {\n    case 83: {\n'
+                      + run + '        break;\n    }\n    }\n}\n',
+        "default block": 'void f(int value) {\n    switch (value) {\n    default: {\n'
+                         + run + '        break;\n    }\n    }\n}\n',
+        "label block": 'void f() {\nentry: {\n' + run + '    use(a+b+c);\n}\n}\n',
+        "array parameter": 'void f(int input[3]) {\n' + run + '    use(input);\n}\n',
+        "default parameter": 'void f(int value = 0) {\n' + run + '    use(value);\n}\n',
+        "constructor": 'Native::Native(int value = 0) {\n' + run + '    use(value);\n}\n',
+        "destructor": 'Native::~Native() {\n' + run + '    use(a+b+c);\n}\n',
+        "annotated destructor": 'ARM Native::~Native() {\n' + run + '    use(a+b+c);\n}\n',
+        "operator": 'bool Native::operator==(const Native& value) const {\n'
+                    + run + '    return a+b+c;\n}\n',
+        "call operator": 'int Native::operator()(int value) const {\n'
+                         + run + '    return a+b+c;\n}\n',
+        "index operator": 'int Native::operator[](int value) const {\n'
+                          + run + '    return a+b+c;\n}\n',
+        "template": 'template <class T>\nvoid f(T value) {\n' + run + '    use(value);\n}\n',
+        "nested switch labels": 'void f(int value) {\n    switch (value) {\n    case 83: {\n'
+                                '        switch (value) {\n        case 1: {\n'
+                                + run + '            break;\n        }\n        default: {\n'
+                                + run + '            break;\n        }\n        }\n'
+                                '        break;\n    }\n    }\n}\n',
+        "inline method": 'struct Native {\n    unsigned int erasePageTime;\n'
+                         '    unsigned char initialStatus;\n    void f() {\n'
+                         + run + '        use(a+b+c);\n    }\n};\n',
+        "inline constructor": 'class Native {\n    unsigned int erasePageTime;\n'
+                              '    unsigned char initialStatus;\npublic:\n    explicit Native(int value) {\n'
+                              + run + '        use(value);\n    }\n};\n',
+        "inline destructor": 'class Native {\npublic:\n    virtual ~Native() {\n'
+                             + run + '        use(a+b+c);\n    }\n};\n',
+        "inline operator": 'class Native {\npublic:\n    int operator[](int index) const {\n'
+                           + run + '        return a+b+c;\n    }\n};\n',
     }
     for name, text in positives.items():
         for rule in (C.r4_decl_reorder, C.r14_decl_move, C.r17_decl_permute):
             if not rule(text):
                 return "%s lost %s" % (rule.__name__, name)
+    case = ('void f(int value) {\n    switch (value) {\n    case 83: {\n'
+            '        int a = 1;\n        int b = 2;\n        first();\n'
+            '        if (value) {\n            nested();\n        }\n'
+            '        last();\n        break;\n    }\n    }\n}\n')
+    for rule in (C.r7_decl_split, C.r34_call_move_earlier):
+        if not rule(case):
+            return "%s lost case-83 block candidates" % rule.__name__
+    for member in ('explicit Native(int value)', 'void f(int value)'):
+        prefix = ('class Native {\n    unsigned int erasePageTime;\n'
+                  '    unsigned char initialStatus;\npublic:\n    ' + member + ' {\n')
+        text = (prefix + '        int a = 1;\n        int b = 2;\n        first();\n'
+                '        if (value) {\n            int local = 3;\n            use(local);\n        }\n'
+                '        last();\n    }\n    unsigned int tail;\n};\n')
+        for rule in (C.r4_decl_reorder, C.r7_decl_split, C.r8_decl_hoist, C.r34_call_move_earlier):
+            candidates = rule(text)
+            if not candidates:
+                return "%s lost inline member %s" % (rule.__name__, member)
+            for label, candidate in candidates:
+                if not candidate.startswith(prefix) or not candidate.endswith('    unsigned int tail;\n};\n'):
+                    return "%s changed inline member fields/header (%s)" % (rule.__name__, label)
+    for text in (positives["ordinary locals"], negatives["unfinished scope"],
+                 negatives["conditional scope"], '}', ')'):
+        mappings = C._local_scopes(text)
+        for mapping in mappings:
+            before = dict(mapping)
+            try:
+                mapping[-1] = (-1, -1)
+            except TypeError:
+                pass
+            else:
+                return "cached local-scope mapping is mutable"
+            if dict(mapping) != before:
+                return "failed mutation changed cached local scopes"
+        cached = C._local_scopes(text)
+        if any(first is not second for first,second in zip(mappings,cached)):
+            return "local-scope cache no longer reuses immutable mappings"
     protected = ('struct S {\n' + members + '};\n')
     params = 'int f(\n    int first,\n    int second)\n{\n'
-    text = protected + params + run + '    return first+second+a+b+c;\n}\n'
-    for rule in rules:
-        for label, candidate in rule(text):
-            if not candidate.startswith(protected + params):
-                return "%s altered aggregate/parameter prefix (%s)" % (rule.__name__, label)
-    # Separate functions and a local class must never supply r11 insertion slots.
+    for header in (params, 'void f(\n    int input[3],\n    int value = 0)\n{\n'):
+        text = protected + header + run + '    use(a+b+c);\n}\n'
+        for rule in rules:
+            for label, candidate in rule(text):
+                if not candidate.startswith(protected + header):
+                    return "%s altered aggregate/parameter prefix (%s)" % (rule.__name__, label)
     first = 'void first() {\n    int a;\n}\n'
     second = ('void second() {\n    struct Local {\n    int member;\n    };\n'
               '    if (flag) {\n        int moved = value;\n        use(moved);\n    }\n}\n')
@@ -1604,8 +1730,7 @@ def _placement():
 
 # ---------------------------------------------------------------- autorepair.py
 
-def autorepair_cpp_regression(autorepair_path, scratch_parent, canonical_source=None):
-    """Exercise the production repair, stubbing existing compiler/gate probes only."""
+def autorepair_cpp_regression(autorepair_path, scratch_parent):
     import importlib.util
     from pathlib import Path
     import subprocess
@@ -1620,14 +1745,12 @@ def autorepair_cpp_regression(autorepair_path, scratch_parent, canonical_source=
     scratch_parent = Path(scratch_parent).resolve()
     scratch_parent.mkdir(parents=True, exist_ok=True)
     own, setter = 'func_020b0594', '_Z26SetIntArrayElement020b0334Piii'
-    canonical = canonical_source or (
+    canonical = (
         'void SetIntArrayElement020b0334(int* array, int index, int value);\n'
         '// USA: func_020b0594\n'
         'extern "C" ARM void func_020b0594(int resource, int offset, int tier, void* object) {\n'
         '    SetIntArrayElement020b0334((int*)object, tier, offset);\n}\n')
     assert canonical_declaration(canonical, 'SetIntArrayElement020b0334', setter)
-    # The fixture asserts only the spelling transformation. Existing compiler/gate
-    # probes are controlled here; genuine retained-object proof is kept separately.
     probes = {'export': 0, 'gate': 0}
 
     def emits(text_or_path, want):
@@ -1693,8 +1816,6 @@ def autorepair_cpp_regression(autorepair_path, scratch_parent, canonical_source=
 
             plain_cpp = canonical.replace(declaration, 'extern "C" int PlainCpp(int* array);')
             plain_cpp = plain_cpp.replace('SetIntArrayElement020b0334((int*)object, tier, offset)', 'PlainCpp((int*)object)')
-            # The whole genuine source uses state->offsets rather than the compact
-            # fixture expression; replace that call too when running the retained case.
             plain_cpp = plain_cpp.replace('SetIntArrayElement020b0334(state->offsets, tier, offset)', 'PlainCpp(state->offsets)')
             repaired, changes = run('existing_cpp_linkage', plain_cpp)
             assert 'extern "C" int PlainCpp(' not in repaired and 'int PlainCpp(' in repaired
@@ -1995,7 +2116,6 @@ def _classify_timer_rela():
     C = load("classify")
     source = open(f"{KIT}/regress_fixtures/TimerCallbackRela_020c6c48.cpp", encoding="utf-8").read()
     addr = "020c6c48"
-    # A fresh module and private state keep the negative out of the dispatch/cache pools.
     with tempfile.TemporaryDirectory(prefix="dqix classifier rela ") as d:
         C.SP = d
         try:
@@ -2046,255 +2166,116 @@ def _classify_timer_rela():
     return None
 
 
-def _linked_fixture_object(text, address, size, export, expected, *, rom_size=None, rom_offsets=None):
-    """Link one complete ARM fixture; optional site mapping is explicit for size counterfactuals."""
-    import struct
-    import buildcfg
 
-    assert buildcfg.REGION == "usa", "these measured main ARM fixtures require DQIX_REGION=usa"
-    assert not any(os.environ.get(name) for name in ("MWCC", "WGATE_FLAGS", "WDIFF_FLAGS")), "fixture requires unmodified compiler settings"
-    repo = buildcfg.REPO
-    config = os.path.join(repo, buildcfg.config_dir("main"))
-    symbols, slots = {}, {}
+
+def _classify_abs32_regression(C, observed=None):
+    import gc
+    import struct
     from pathlib import Path
-    for path in Path(config).rglob("symbols.txt"):
-        overlay = re.search(r"(?:^|/)overlays/ov(\d+)(?:/|$)", path.as_posix())
-        module = "overlay(%d)" % int(overlay.group(1)) if overlay else "main"
-        for line in path.read_text(encoding="utf-8").splitlines():
-            match = re.match(r"(\S+)\s+kind:\S+.*?addr:0x([0-9a-fA-F]+)", line)
-            if match:
-                name, value = match.group(1), int(match.group(2), 16)
-                symbols.setdefault(name, set()).add((value, module))
-                function = re.search(r"kind:function\(arm,size=0x([0-9a-fA-F]+)\)", line)
-                if function:
-                    slots.setdefault(name, set()).add((value, int(function.group(1), 16)))
-    header = open(os.path.join(config, "delinks.txt"), encoding="utf-8").read().split("\n\n", 1)[0]
-    base = min(int(value, 16) for value in re.findall(r"start:0x([0-9a-fA-F]+)", header))
-    pristine = open(os.path.join(repo, buildcfg.pristine("main")), "rb").read()
-    rom_size = size if rom_size is None else rom_size
-    target = pristine[address - base:address - base + rom_size]
-    assert len(target) == rom_size and slots[export] == {(address, rom_size)}, "fixture ROM slot changed"
-    expected = sorted(expected)
-    assert len({row[0] for row in expected}) == len(expected), "expected relocation offsets repeat"
-    if rom_offsets is None:
-        rom_offsets = {row[0]: row[0] for row in expected}
-    assert set(rom_offsets) == {row[0] for row in expected}, "ROM site map must cover exactly the fixture relocations"
-    metadata = {}
-    for line in open(os.path.join(config, "relocs.txt"), encoding="utf-8"):
-        match = re.fullmatch(r"from:0x([0-9a-fA-F]+) kind:(\S+) to:(\S+)(?: add:(\S+))? module:(\S+)\s*", line)
-        if match:
-            origin, kind, value, addend, module = match.groups()
-            if kind == "overlay_id":
-                assert value.isdecimal() and addend is None and module == "none", "unexpected overlay ID row"
-                continue
-            assert re.fullmatch(r"0x[0-9a-fA-F]+", value), "unexpected relocation address"
-            key = int(origin, 16)
-            assert key not in metadata, "duplicate configured relocation site"
-            metadata[key] = (kind, int(value, 16) + (int(addend, 0) if addend else 0), module)
-        else:
-            assert not line.startswith("from:"), "unparsed main relocation row: " + line.strip()
+    from types import SimpleNamespace
+    from unittest.mock import patch
 
-    elf = _compile_elf(text, repo)
-    assert not isinstance(elf, str), elf
-    assert elf["e_machine"] == "EM_ARM" and elf.elfclass == 32 and elf.little_endian, "fixture changed ELF architecture"
-    table = elf.get_section_by_name(".symtab")
-    definitions = [symbol for symbol in table.iter_symbols()
-                   if symbol.name == export and isinstance(symbol["st_shndx"], int)]
-    assert len(definitions) == 1, "fixture must define its real bound symbol once"
-    definition = definitions[0]
-    assert definition["st_info"]["type"] == "STT_FUNC" and definition["st_info"]["bind"] == "STB_GLOBAL", "fixture lost its global function binding"
-    index = definition["st_shndx"]
-    section = elf.get_section(index)
-    allocated = [i for i, sec in enumerate(elf.iter_sections()) if sec["sh_flags"] & 2 and sec["sh_size"]]
-    assert allocated == [index], "fixture gained an extra allocated section"
-    assert section.name == ".text" and section["sh_flags"] == 6, "export left ordinary executable text"
-    assert len(section.data()) == size, "fixture emitted size changed"
-    assert definition["st_value"] == 0 and definition["st_size"] == size, "fixture export span changed"
-    exports = [symbol.name for symbol in table.iter_symbols()
-               if symbol["st_info"]["bind"] in ("STB_GLOBAL", "STB_WEAK")
-               and isinstance(symbol["st_shndx"], int) and elf.get_section(symbol["st_shndx"])["sh_flags"] & 2]
-    assert exports == [export], "fixture gained a runtime export"
-    undefined = {symbol.name for symbol in table.iter_symbols() if symbol.name and symbol["st_shndx"] == "SHN_UNDEF"}
-    assert undefined == ({row[2] for row in expected} - set(exports)), "fixture helper/data identities changed"
-    linked, relocations, seen = bytearray(section.data()), [], set()
-    for relsec in elf.iter_sections():
-        if relsec["sh_type"] not in ("SHT_REL", "SHT_RELA") or relsec["sh_info"] != index:
-            continue
-        relsymbols = elf.get_section(relsec["sh_link"])
-        for rr in relsec.iter_relocations():
-            assert rr.is_RELA(), "fixture lost its explicit RELA addends"
-            offset, kind = rr["r_offset"], rr["r_info_type"]
-            assert offset % 4 == 0 and 0 <= offset <= size - 4, "relocation is outside the export"
-            assert offset not in seen, "duplicate relocation site"
-            seen.add(offset)
-            name = relsymbols.get_symbol(rr["r_info_sym"]).name
-            assert len(symbols[name]) == 1, "fixture has an ambiguous configured binding"
-            value, module = next(iter(symbols[name]))
-            addend = rr["r_addend"]
-            rom_offset = rom_offsets[offset]
-            assert rom_offset % 4 == 0 and 0 <= rom_offset <= rom_size - 4, "mapped relocation is outside the original ROM slot"
-            word = struct.unpack_from("<I", linked, offset)[0]
-            romword = struct.unpack_from("<I", target, rom_offset)[0]
-            if kind == 1:
-                assert addend == -8, "ARM BL lost its explicit -8 addend"
-                assert word >> 24 == 0xeb and romword >> 24 == 0xeb, "PC24 site is not an ARM BL"
-                immediate = romword & 0xffffff
-                immediate -= 0x1000000 if immediate & 0x800000 else 0
-                assert address + rom_offset + 8 + immediate * 4 == value, "call target disagrees with original ROM site"
-                assert metadata[address + rom_offset] == ("arm_call", value, module), "call metadata binding changed"
-                displacement = value + addend - (address + offset)
-                assert displacement % 4 == 0 and -(1 << 25) <= displacement < (1 << 25), "PC24 out of range"
-                word = (word & 0xff000000) | ((displacement >> 2) & 0xffffff)
-            elif kind == 2:
-                word = (value + addend) & 0xffffffff
-                assert romword == word, "ABS32 target disagrees with original ROM site"
-                assert metadata[address + rom_offset] == ("load", word, module), "ABS32 metadata binding changed"
-            else:
-                raise AssertionError("unexpected runtime relocation kind %s" % kind)
-            struct.pack_into("<I", linked, offset, word)
-            relocations.append((offset, kind, name, value, addend))
-    assert sorted(relocations) == expected, "fixture's complete relocation identities changed"
-    return {"linked": bytes(linked), "target": target, "relocations": sorted(relocations),
-            "section_index": index, "exports": exports, "undefined": sorted(undefined),
-            "size": len(linked), "rom_size": rom_size, "rom_offsets": rom_offsets}
+    export_name = "ClassifierFixture"
 
+    def object_bytes(word, symbol_type, addend, rela=True, relocation=2):
+        strings = b"\0" + export_name.encode() + b"\0Target\0"
+        names = b"\0.text\0.rela.text\0.symtab\0.strtab\0.shstrtab\0"
+        relname = ".rela.text" if rela else ".rel.text"
+        if not rela:
+            names = names.replace(b".rela.text", b".rel.text")
+        symbols = bytes(16) + struct.pack("<IIIBBH", 1, 0, 4, 0x12, 0, 1)
+        symbols += struct.pack("<IIIBBH", strings.index(b"Target\0"), 0, 0, 0x10 | symbol_type, 0, 0)
+        record = struct.pack("<II", 0, (2 << 8) | relocation)
+        if rela:
+            record += struct.pack("<i", addend)
+        sections = [(".text", 1, 6, struct.pack("<I", word), 0, 0, 4, 0),
+                    (relname, 4 if rela else 9, 0, record, 3, 1, 4, 12 if rela else 8),
+                    (".symtab", 2, 0, symbols, 4, 1, 4, 16),
+                    (".strtab", 3, 0, strings, 0, 0, 1, 0),
+                    (".shstrtab", 3, 0, names, 0, 0, 1, 0)]
+        image, headers = bytearray(52), [bytes(40)]
+        for name, kind, flags, data, link, info, align, entsize in sections:
+            image.extend(bytes((-len(image)) % align))
+            offset = len(image)
+            image.extend(data)
+            headers.append(struct.pack("<10I", names.index(name.encode() + b"\0"), kind,
+                                       flags, 0, offset, len(data), link, info, align, entsize))
+        image.extend(bytes((-len(image)) % 4))
+        offset = len(image)
+        image.extend(b"".join(headers))
+        image[:52] = struct.pack("<16sHHIIIIIHHHHHH", b"\x7fELF\x01\x01\x01" + bytes(9),
+                                 1, 40, 1, 0, 0, offset, 0, 52, 0, 0, 40, 6, 5)
+        return bytes(image)
 
-def _recursive_fixture_export():
-    """A recursive call binds the defined export rather than an undefined helper."""
-    import buildcfg
-    if buildcfg.REGION != "usa":
-        return "the main:02056c3c compiler fixture requires DQIX_REGION=usa"
-    source = open(f"{KIT}/regress_fixtures/RecursiveSort_02056c3c.cpp", encoding="utf-8").read()
-    expected = [
-        (0x38, 1, "_fls", 0x0200c088, -8),
-        (0x54, 1, "_fgr", 0x0200bfc4, -8),
-        (0xb0, 1, "func_02056c3c", 0x02056c3c, -8),
-        (0xcc, 1, "func_02056c3c", 0x02056c3c, -8),
+    target = 0x02001000
+    # Controlled ELF inputs exercise classification, not compiler/codegen success.
+    cases = [
+        ("rela_explicit", 0, 1, "data", 8, target + 8, True, 2, "TRUSTED"),
+        ("rela_nonzero", 5, 1, "data", 8, target + 8, True, 2, "RISKY"),
+        ("rela_nonzero_wrong", 5, 1, "data", 8, target + 12, True, 2, "RELOCWRONG"),
+        ("rel_implicit", 8, 1, "data", 0, target + 8, False, 2, "TRUSTED"),
+        ("data_shifted", 0, 1, "data", 0, target + 1, True, 2, "RELOCWRONG"),
+        ("arm_function", 0, 2, "arm", 0, target, True, 2, "TRUSTED"),
+        ("arm_shifted", 0, 2, "arm", 0, target + 1, True, 2, "RELOCWRONG"),
+        ("thumb_function", 0, 2, "thumb", 0, target | 1, True, 2, "TRUSTED"),
+        ("object_is_not_thumb", 0, 1, "thumb", 0, target | 1, True, 2, "RELOCWRONG"),
+        ("notype_is_not_thumb", 0, 0, "thumb", 0, target | 1, True, 2, "RELOCWRONG"),
+        ("missing_isa", 0, 2, "data", 0, target | 1, True, 2, "RISKY"),
+        ("ambiguous_isa", 0, 2, "ambiguous", 0, target | 1, True, 2, "RISKY"),
+        ("missing_isa_wrong", 0, 2, "data", 0, target + 8, True, 2, "RELOCWRONG"),
+        ("thumb_odd_addend", 0, 2, "thumb", 1, target | 1, True, 2, "TRUSTED"),
+        ("thumb_increment_carry", 0, 2, "thumb", 1, target + 2, True, 2, "RELOCWRONG"),
+        ("data_odd_addend", 0, 1, "data", 1, target + 1, True, 2, "TRUSTED"),
+        ("branch_nonzero", 0xeb000000, 2, "arm", -8, 0xeb0003fe, True, 1, "TRUSTED"),
     ]
-    linked = _linked_fixture_object(source, 0x02056c3c, 212, "func_02056c3c", expected)
-    assert linked["linked"] == linked["target"], "recursive fixture no longer matches all 212 ROM bytes"
-    assert linked["undefined"] == ["_fgr", "_fls"], "recursive export became an undefined helper"
-    return None
+    failures = []
+    with tempfile.TemporaryDirectory(prefix="dqix classifier inputs ") as d:
+        repo = Path(d)
+        config = repo / "config/usa/arm9"
+        extract = repo / "extract/usa/arm9"
+        config.mkdir(parents=True)
+        extract.mkdir(parents=True)
+        (config / "delinks.txt").write_text(".text start:0x02000000 end:0x02000004 kind:code\n\n")
+        for name, word, symbol_type, isa, addend, pristine, rela, relocation, expected in cases:
+            binding = "kind:function(%s,size=0x4)" % isa if isa in ("arm", "thumb") else "kind:data"
+            rows = f"{export_name} kind:function(arm,size=0x4) addr:0x02000000\n"
+            rows += "Target %s addr:0x02001000\n" % binding
+            if isa == "ambiguous":
+                rows += "Target kind:function(thumb,size=0x4) addr:0x02001000\n"
+            (config / "symbols.txt").write_text(rows)
+            (extract / "arm9.bin").write_bytes(struct.pack("<I", pristine))
+            image = object_bytes(word, symbol_type, addend, rela, relocation)
+
+            def compiler(command, **kwargs):
+                Path(command[command.index("-o") + 1]).write_bytes(image)
+                return SimpleNamespace(returncode=0)
+
+            with patch.object(C, "REPO", d), patch.object(C, "SP", d), \
+                    patch.object(C, "_CTX", {}), patch.object(C, "_headers", return_value=None), \
+                    patch.object(C.buildcfg, "lcf_symbols", return_value={}), \
+                    patch.object(C.subprocess, "run", side_effect=compiler):
+                if hasattr(C, "_TARGET_ISA"):
+                    with patch.object(C, "_TARGET_ISA", {}):
+                        result = C.classify("main", {"02000000": "void fixture();\n"}, workdir=str(repo / name))
+                else:
+                    result = C.classify("main", {"02000000": "void fixture();\n"}, workdir=str(repo / name))
+            actual = result.get("02000000")
+            if observed is not None:
+                observed.append({"case": name, "expected": expected, "actual": actual,
+                                 "elf_symbol_type": symbol_type, "curated_isa": isa,
+                                 "word": word, "addend": addend, "pristine": pristine,
+                                 "rela": rela, "relocation": relocation})
+            if actual != expected:
+                failures.append("%s: %s, expected %s" % (name, actual, expected))
+        gc.collect()
+    return "; ".join(failures) or None
 
 
-def _relative_byte_offset():
-    """The real fi/fd loader distinguishes a byte offset from an integer address sum."""
-    import struct
-    import buildcfg
-
-    if buildcfg.REGION != "usa":
-        return "the main:02042804 compiler fixture requires DQIX_REGION=usa"
-    source = open(f"{KIT}/regress_fixtures/RelativeByteOffset_02042804.cpp", encoding="utf-8").read()
-    pointer_sum = "reinterpret_cast<int>(base + header->entries[i].val)"
-    integer_sum = "reinterpret_cast<int>(base) + header->entries[i].val"
-    if source.count(pointer_sum) != 1:
-        return "the isolated relative-byte-offset expression is missing or ambiguous"
-    counterfactual = source.replace(pointer_sum, integer_sum)
-
-    expected = [
-        (0x20, 1, "__clear", 0x0200f374, -8),
-        (0x30, 1, "sprintf", 0x02003ce8, -8),
-        (0x48, 1, "_Z18LoadFileIntoMemoryPKcPvPj", 0x02075098, -8),
-        (0x5c, 1, "_ZN13SafeAllocator8AllocateEj", 0x02032544, -8),
-        (0x6c, 1, "memcpy", 0x02001a40, -8),
-        (0xcc, 1, "memset", 0x02001aac, -8),
-        (0xdc, 1, "sprintf", 0x02003ce8, -8),
-        (0xf4, 1, "_Z18LoadFileIntoMemoryPKcPvPj", 0x02075098, -8),
-        (0x108, 1, "_ZN13SafeAllocator8AllocateEj", 0x02032544, -8),
-        (0x118, 1, "memcpy", 0x02001a40, -8),
-        (0x134, 2, "data_020f0049", 0x020f0049, 0),
-        (0x138, 2, "data_0211e33c", 0x0211e33c, 0),
-        (0x13c, 2, "data_020f0061", 0x020f0061, 0),
-    ]
-
-    positive = _linked_fixture_object(source, 0x02042804, 320, "func_02042804", expected)
-    negative = _linked_fixture_object(counterfactual, 0x02042804, 320, "func_02042804", expected)
-    target = positive["target"]
-    assert positive["linked"] == target, "relative-byte-pointer fixture no longer matches all 320 ROM bytes"
-    assert positive["relocations"] == negative["relocations"], "counterfactual changed helper/data bindings"
-    differences = [offset for offset, (good, bad) in enumerate(zip(target, negative["linked"])) if good != bad]
-    assert differences == [0xa8, 0xaa], "integer-address counterfactual drifted: %s" % differences
-    assert struct.unpack_from("<I", positive["linked"], 0xa8)[0] == 0xe0802002, "ROM add operands changed"
-    assert struct.unpack_from("<I", negative["linked"], 0xa8)[0] == 0xe0822000, "negative is no longer the reversed integer add"
-    return None
-
-
-def _yaw_distance_definite_assignment():
-    """Only remove a default initializer when the equality return proves assignment."""
-    import struct
-    import buildcfg
-    if buildcfg.REGION != "usa":
-        return "the main:02041378 compiler fixture requires DQIX_REGION=usa"
-    source = open(f"{KIT}/regress_fixtures/DefiniteYawDistance_02041378.cpp", encoding="utf-8").read()
-    bare = "fix32_t distance;"
-    assert source.count(bare) == 1, "definitely-assigned distance declaration changed"
-    for guard in ("if (current == target) {\n        return;", "if (current < target)", "else if (target < current)"):
-        assert guard in source, "the initialization precondition changed"
-    counterfactual = source.replace(bare, "fix32_t distance = 0;")
-    expected = [
-        (0x70, 1, "_Z22fix32ReduceAngle0To2Pii", 0x02030f30, -8),
-        (0xb0, 1, "_Z22fix32ReduceAngle0To2Pii", 0x02030f30, -8),
-        (0xe4, 1, "_Z20StoreVec3AtField0x50Phiii", 0x0203db34, -8),
-    ]
-    positive = _linked_fixture_object(source, 0x02041378, 248, "func_02041378", expected)
-    shifted = [(offset + 8, *binding) for offset, *binding in expected]
-    negative = _linked_fixture_object(counterfactual, 0x02041378, 256, "func_02041378", shifted,
-                                      rom_size=248, rom_offsets={row[0] + 8: row[0] for row in expected})
-    assert positive["linked"] == positive["target"], "definitely-assigned fixture no longer matches all 248 bytes"
-    assert [row[1:] for row in positive["relocations"]] == [row[1:] for row in negative["relocations"]], "initializer changed the three real call bindings/order"
-    assert struct.unpack_from("<I", negative["linked"], 0x18)[0] == 0xe15c0003, "initializer no longer emits the redundant CMP"
-    assert struct.unpack_from("<I", negative["linked"], 0x1c)[0] == 0xe3a02000, "initializer no longer emits MOV distance,0"
-    return None
-
-
-def _external_getter_comparison():
-    """The measured combined local/nested guard preserves one external call and short circuit."""
-    import struct
-    import buildcfg
-    if buildcfg.REGION != "usa":
-        return "the main:02026bdc compiler fixture requires DQIX_REGION=usa"
-    source = open(f"{KIT}/regress_fixtures/ExternalGetterComparison_02026bdc.cpp", encoding="utf-8").read()
-    nested = """            if (unknownObject != 0) {
-                int unknownValue = unknownObject->obj3D_.GetField06();
-                if (unknownValue == value) {
-                    combatantState->flags |= 8;
-                    combatantState->flags &= ~0x10;
-                    found = 1;
-                }
-            }"""
-    compound = """            if (unknownObject != 0 && value == unknownObject->obj3D_.GetField06()) {
-                combatantState->flags |= 8;
-                combatantState->flags &= ~0x10;
-                found = 1;
-            }"""
-    assert source.count(nested) == 1, "combined local/nested null-guard form changed"
-    counterfactual = source.replace(nested, compound)
-    expected = [
-        (0x0c, 1, "_ZN9GameState11GetInstanceEv", 0x0200f398, -8),
-        (0x24, 1, "_ZN9GameState20GetGameObjectByIndexEi", 0x0200fd70, -8),
-        (0x40, 1, "func_ov017_0218b5b0", 0x0218b5b0, -8),
-        (0x4c, 1, "_Z25GetCombatantWithFlag0x100P9GameStatei", 0x0200ff1c, -8),
-        (0x58, 1, "func_02012fe4", 0x02012fe4, -8),
-        (0xc4, 1, "_ZNK8Object3D10GetField06Ev", 0x020375f8, -8),
-        (0x104, 1, "_s32_div_f", 0x0200cf44, -8),
-        (0x144, 1, "_s32_div_f", 0x0200cf44, -8),
-        (0x198, 1, "_Z18SetFields1a8And1acP9S02053f4cii", 0x02053f4c, -8),
-        (0x1a4, 1, "_Z13SetField0x1b0Pvh", 0x02053f6c, -8),
-        (0x1dc, 1, "_Z22IsValueInRange0201b5d8i", 0x0201b5d8, -8),
-        (0x1ec, 1, "_ZN9GameState20GetUnknownGameObjectEv", 0x0200fddc, -8),
-        (0x1f8, 1, "_ZNK8Object3D10GetField06Ev", 0x020375f8, -8),
-        (0x274, 1, "_Z18SetFields1a8And1acP9S02053f4cii", 0x02053f4c, -8),
-        (0x280, 1, "_Z13SetField0x1b0Pvh", 0x02053f6c, -8),
-    ]
-    positive = _linked_fixture_object(source, 0x02026bdc, 736, "func_02026bdc", expected)
-    negative = _linked_fixture_object(counterfactual, 0x02026bdc, 736, "func_02026bdc", expected)
-    assert positive["linked"] == positive["target"], "external-getter fixture no longer matches all 736 bytes"
-    assert positive["relocations"] == negative["relocations"], "combined source form changed real call bindings"
-    differences = [offset for offset, (good, bad) in enumerate(zip(positive["target"], negative["linked"])) if good != bad]
-    assert differences == [0x1fc, 0x1fe], "compound-guard counterfactual drifted: %s" % differences
-    assert struct.unpack_from("<I", positive["linked"], 0x1fc)[0] == 0xe1500009, "ROM CMP operand order changed"
-    assert struct.unpack_from("<I", negative["linked"], 0x1fc)[0] == 0xe1590000, "counterfactual no longer reverses the CMP operands"
-    return None
+@check("the classifier checks RELA pool contents and genuine Thumb function pointers",
+       "masked ABS32 words with nonzero RELA storage, shifted data/ARM targets or an "
+       "arithmetic +1 carry were accepted as TRUSTED")
+def _classify_abs32_inputs():
+    return _classify_abs32_regression(load("classify"))
 
 
 # ------------------------------------------------------- END-TO-END (slow, compiles)
@@ -2378,18 +2359,6 @@ def run_functional():
     import subprocess
     import shutil
     import tempfile
-    check("relative file offsets retain the genuine byte-pointer ADD operands",
-          "main:02042804 is REGPERM2 with an integer address sum but MATCH320 with a char* "
-          "relative-offset addition; both forms must keep the same 13 real relocation targets")(_relative_byte_offset)
-    check("equality return permits the definitely-assigned yaw distance declaration",
-          "main:02041378 matches248 after definite assignment; restoring only distance=0 emits256 "
-          "and shifts three real calls, whose bindings must be verified against original ROM sites")(_yaw_distance_definite_assignment)
-    check("external getter local and nested null guard retain exact CMP operand order",
-          "main:02026bdc is REGPERM2 with the measured compound direct-getter guard and MATCH736 "
-          "with the combined local/nested form; both preserve all15 calls including overlay17")(_external_getter_comparison)
-    check("recursive calls use the fixture's own defined export",
-          "main:02056c3c has two external comparisons and two recursive calls; all four real "
-          "PC24 targets and all 212 ROM bytes must be checked without classifying the export as undefined")(_recursive_fixture_export)
     bad = 0
     for module, addr, prior, expected, budget, what in FUNCTIONAL:
         src = os.path.join(KIT, prior)
@@ -2434,20 +2403,52 @@ def run_functional():
 
 
 def sweep_fingerprint():
-    """Hash of everything that decides whether a crack still lands."""
+    import ast
     import hashlib
     h = hashlib.md5()
-    for p in ("colorsweep.py", "wdiff.py", "wgate.py", "regress.py",
-              "regress_fixtures/RelativeByteOffset_02042804.cpp",
-              "regress_fixtures/DefiniteYawDistance_02041378.cpp",
-              "regress_fixtures/ExternalGetterComparison_02026bdc.cpp",
-              "regress_fixtures/RecursiveSort_02056c3c.cpp"):
+    source = open(f"{KIT}/regress.py", encoding="utf-8").read()
+    runner = next(node for node in ast.parse(source).body
+                  if isinstance(node, ast.FunctionDef) and node.name == "run_functional")
+    h.update(ast.dump(runner, include_attributes=False).encode())
+    for p in ("colorsweep.py", "wdiff.py", "wgate.py", *(row[2] for row in FUNCTIONAL)):
+        h.update(p.encode())
         try:
             h.update(open(f"{KIT}/{p}", "rb").read())
         except OSError:
             h.update(b"missing")
     h.update(repr(FUNCTIONAL).encode())
     return h.hexdigest()
+
+
+@check("the sweep stamp tracks the fixture runner and files but ignores unrelated fast-test edits",
+       "hashing all regress.py forced a new slow run after every fast regression edit")
+def _sweep_fingerprint_sources():
+    import ast
+    from pathlib import Path
+    tree = ast.parse(open(f"{KIT}/regress.py", encoding="utf-8").read())
+    function = next(node for node in tree.body if isinstance(node, ast.FunctionDef)
+                    and node.name == "sweep_fingerprint")
+    with tempfile.TemporaryDirectory(prefix="sweep fingerprint ", dir=f"{SP}/handwork") as directory:
+        root = Path(directory)
+        (root / "regress_fixtures").mkdir()
+        for name in ("colorsweep.py", "wdiff.py", "wgate.py"):
+            (root / name).write_text("runtime\n", encoding="utf-8")
+        fixture = root / "regress_fixtures/prior.cpp"
+        fixture.write_text("void Prior() {}\n", encoding="utf-8")
+        source = "def run_functional():\n    return 0\n\ndef FastOnly():\n    return 10\n"
+        (root / "regress.py").write_text(source, encoding="utf-8")
+        namespace = {"KIT": str(root), "FUNCTIONAL": [("main", "02000000", "regress_fixtures/prior.cpp", "MATCH", 5, "fixture")]}
+        exec(compile(ast.Module(body=[function], type_ignores=[]), "fingerprint_probe", "exec"), namespace)
+        fingerprint = namespace["sweep_fingerprint"]
+        stamp = fingerprint()
+        (root / "regress.py").write_text(source.replace("return 10", "return 11"), encoding="utf-8")
+        assert fingerprint() == stamp, "fast-only edit invalidates slow stamp"
+        (root / "regress.py").write_text(source.replace("return 0", "return 1"), encoding="utf-8")
+        assert fingerprint() != stamp, "fixture runner edit fails to invalidate stamp"
+        (root / "regress.py").write_text(source, encoding="utf-8")
+        fixture.write_text("void Prior() { int changed; }\n", encoding="utf-8")
+        assert fingerprint() != stamp, "fixture file edit fails to invalidate stamp"
+    return None
 
 
 

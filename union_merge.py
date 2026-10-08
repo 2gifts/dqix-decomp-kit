@@ -158,26 +158,30 @@ def merge_symbols(base, ours, theirs):
     return "\n".join(out) + "\n", notes
 
 
-for path in sys.argv[1:]:
-    ours, theirs = stage(2, path), stage(3, path)
-    if ours is None or theirs is None:
-        print("SKIP %s: not a two-sided conflict" % path)
-        continue
-    if path.endswith("delinks.txt"):
-        text, notes = merge_delinks(ours, theirs)
-        for kept, gone, r in notes:
-            print("  range 0x%08x-0x%08x now covered by %s" % (r[0], r[1], kept))
-            print("DROP-FILE %s" % gone)          # machine-readable for the caller
-    elif path.endswith("symbols.txt"):
-        text, notes = merge_symbols(stage(1, path) or "", ours, theirs)
-        for a, o, n in notes[:15]:
-            print("  0x%08x: %s -> %s" % (a, o, n))
-        if len(notes) > 15:
-            print("  ... %d more renames" % (len(notes) - 15))
-    else:
-        print("SKIP %s: no union rule" % path)
-        continue
-    # Explicit utf-8: without it Python uses the Windows locale codepage, so any non-ASCII byte in a
-    # symbol name would be mangled or raise -- every other writer in the pipeline pins the encoding.
-    open(path, "w", encoding="utf-8", newline="\n").write(text)
-    print("UNION %s: %d lines" % (path, len(text.splitlines())))
+def main():
+    for path in sys.argv[1:]:
+        ours, theirs = stage(2, path), stage(3, path)
+        if ours is None or theirs is None:
+            print("SKIP %s: not a two-sided conflict" % path)
+            continue
+        if path.endswith("delinks.txt"):
+            text, notes = merge_delinks(ours, theirs)
+            for kept, gone, r in notes:
+                print("  range 0x%08x-0x%08x now covered by %s" % (r[0], r[1], kept))
+                print("DROP-FILE %s" % gone)
+        elif path.endswith("symbols.txt"):
+            text, notes = merge_symbols(stage(1, path) or "", ours, theirs)
+            for a, o, n in notes[:15]:
+                print("  0x%08x: %s -> %s" % (a, o, n))
+            if len(notes) > 15:
+                print("  ... %d more renames" % (len(notes) - 15))
+        else:
+            print("SKIP %s: no union rule" % path)
+            continue
+        # Preserve non-ASCII symbol names independently of the Windows locale.
+        open(path, "w", encoding="utf-8", newline="\n").write(text)
+        print("UNION %s: %d lines" % (path, len(text.splitlines())))
+
+
+if __name__ == "__main__":
+    main()
