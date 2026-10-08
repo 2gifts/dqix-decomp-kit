@@ -123,6 +123,16 @@ refilling slots and `claim.py` serves nothing while either fails; integration co
   crack one member and cite its address in `core.md`, or write `<CLASS> <reason>` in
   `wlog/blockers_declined.txt`. `blockercheck.py --verbose` ranks the classes.
 
+## Kit updates under a running fleet
+
+`kit_update.py` refuses while the fleet runs, so the fleet updates itself. Every 10 minutes
+`pull_all.sh` checks the published kit. When it has moved, the dispatcher writes
+`claims/UPDATE_WAITING`, and `claim.py` serves no new function: each slot ends after the function it
+holds. Once no slot, integration or sweep is running, it runs `kit_update.py --dispatcher` and
+restarts itself on the new code. `supervise.sh` and `presweep_watch.sh` restart themselves when the
+kit's commit changes. Running work is never killed. A conflicting local kit commit stops the cycle
+(`KIT UPDATE BLOCKED` in `pull_all.log`) until `kit_update.py` is run by hand.
+
 ## Integration
 
 Slots only produce gated source. Every `INTEGRATE_EVERY` (600) seconds, or once `INTEGRATE_PENDING`

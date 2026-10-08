@@ -31,7 +31,7 @@ new work (exit 3) until you update. Your own unpublished kit commits are kept on
 |---|---|---|
 | 0 | up to date, or updated and `kit_init.py` re-run | re-read every file it prints as `RE-READ`, then work |
 | 1 | the fetch failed (offline), or `kit_init.py` failed after an update | tell the user the line it printed; fix a `kit_init.py` FAIL before working |
-| 2 | the fleet or an integration is running, so nothing was pulled | tell the user an update is waiting; never pull under a running script |
+| 2 | the fleet or an integration is running, so nothing was pulled | nothing to do: the fleet drains and updates itself (docs/FLEET.md); never pull under a running script |
 | 3 | uncommitted changes, or your unpublished commits conflict with the update | tell the user; never stash, reset or discard them yourself |
 
 **Give.** Anything you learned that another agent could reuse goes back to the kit as a pull request
