@@ -702,12 +702,16 @@ def recurse(addrs):
         _log = open(f"{SP}/wlog/gate_{SUF}.txt", encoding='utf-8', errors='ignore').read()
     except OSError:
         _log = ""
-    named = sorted({a for m, a, _p, _w in culprits.name(_log)
-                    if m == ("main" if MAIN else OV) and a in addrs})
+    blamed = {a: w for m, a, _p, w in culprits.name(_log) if m == ("main" if MAIN else OV) and a in addrs}
+    named = sorted(blamed)
     if named:
         keep = [a for a in addrs if a not in named]
         skipped.extend(named); clean()
-        (named_bad if NO_STRIKE[0] else faildefer).extend(named)
+        for a in named:
+            if blamed[a] in ("compile", "config"):
+                (named_bad if NO_STRIKE[0] else faildefer).append(a)
+            else:
+                drifted.append(a)
         print(f"  named-cull {len(named)} {named[:4]} -> re-gate {len(keep)}")
         recurse(keep)
         return
