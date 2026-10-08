@@ -43,6 +43,7 @@ def link_dir(src, dst):
 
 
 def create():
+    git("worktree", "prune")
     git("worktree", "add", "--detach", INTEG, BRANCH)
     tracked = set(git("ls-files", "extract").splitlines())
     for name in os.listdir(f"{REPO}/extract"):
@@ -59,9 +60,17 @@ def sync():
     if not os.path.exists(f"{INTEG}/.git"):
         create()
     tip, head = git("rev-parse", BRANCH), git("rev-parse", "HEAD", cwd=INTEG)
-    unpublished = subprocess.run(["git", "-C", REPO, "merge-base", "--is-ancestor", tip, head]).returncode == 0
-    git("checkout", "-q", "-f", "--detach", head if unpublished else tip, cwd=INTEG)
+    if not LOCAL and subprocess.run(["git", "-C", REPO, "fetch", "-q", "origin", BRANCH],
+                                    capture_output=True).returncode == 0:
+        remote = git("rev-parse", f"origin/{BRANCH}")
+        if remote != tip and ancestor(tip, remote):
+            tip = remote
+    git("checkout", "-q", "-f", "--detach", head if ancestor(tip, head) else tip, cwd=INTEG)
     return INTEG
+
+
+def ancestor(older, newer):
+    return subprocess.run(["git", "-C", REPO, "merge-base", "--is-ancestor", older, newer]).returncode == 0
 
 
 def publish():
@@ -77,7 +86,7 @@ def publish():
     head, tip = git("rev-parse", "HEAD", cwd=INTEG), git("rev-parse", BRANCH)
     if head == tip:
         return 0
-    if subprocess.run(["git", "-C", REPO, "merge-base", "--is-ancestor", tip, head]).returncode != 0:
+    if not ancestor(tip, head):
         print(f"REFUSED: {BRANCH} moved to {tip[:8]} during the integration; {head[:8]} not published")
         return 1
     for _ in range(0 if LOCAL else 3):
