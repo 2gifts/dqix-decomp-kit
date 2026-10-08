@@ -1133,6 +1133,15 @@ field the ROM RE-LOADS after a conditional region is read there through a one-li
 reaching it by DIFFERENT arithmetic, one spelling per reload (r29). Helpers with control flow or
 several statements are not inlined: write those bodies in place.
 
+`main:02024e78` independently confirms r20: changing only its unsigned-byte predicate's return
+from `bool` to `int` restores the materialized comparison, taking UNDERGEN12 at824 bytes to exact836.
+The remaining LOOP-SHAPE1 was a real guard-scope error: the mode gates only the type test; the
+existing action-eligibility helper runs unconditionally afterwards. The final stock object proves
+all836 bytes,28 calls and two table references, with no emitted helper/data. Its genuine24-byte
+record constructor, forwarding guard and32/8-byte table indexing were tested together earlier;
+do not attribute that bundled832-to824 change to the constructor alone. Independently matched
+`main:020251bc` uses the same truthful record/predicate forms and proves all928 bytes/30 relocations.
+
 A direct field reread can also change coloring when CSE retains only one memory load. At
 `main:020177d4`, retain the signed `parentKey` local for the guard, but compare
 `source->parentKey` in the nested lookup. Existing `r29_field_reread` closed REGPERM13 to MATCH704
