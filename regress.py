@@ -76,10 +76,11 @@ def scaffold_name_regression(scaffold_path, kit_dir, scratch_parent):
             directory.mkdir(parents=True, exist_ok=True)
         (repo/'tools/configure.py').write_text('MWCC_VERSION="fixture"\nDECOMP_ME_COMPILER="fixture"\n'
                 'CC_FLAGS=""\nCC_INCLUDES=""\nAS_FLAGS=""\nregion_defines="-d usa"\n')
-        (config/'symbols.txt').write_text(
-            'sprintf kind:function(arm,size=0x2c) addr:0x02003ce8\n'
-            'func_02067f5c kind:function(arm,size=0x40) addr:0x02067f5c\n'
-            'func_0206819c kind:function(arm,size=0x64) addr:0x0206819c\n')
+        symbols = [('sprintf', 0x2c, 0x02003ce8), ('func_02067f5c', 0x40, 0x02067f5c),
+                   ('func_0206819c', 0x64, 0x0206819c)]
+        (config/'symbols.txt').write_text(''.join(
+            f'{name} kind:function(arm,size=0x{size:x}) addr:0x{address:08x}\n'
+            for name, size, address in symbols))
         (config/'delinks.txt').write_text('')
         (config/'relocs.txt').write_text(
             'from:0x020681b8 kind:arm_call to:0x02003ce8 module:main\n'
