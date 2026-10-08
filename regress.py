@@ -1758,6 +1758,24 @@ def _culprits_from_red_logs():
         return "a crashed tool was not told apart from a real compile or link failure"
 
 
+@check("a symbol rename leaves another region's address defines pointing at that region",
+       "the upstream merge renamed func_020c6ff8 (a JPN address) to the USA symbol at 0x020c6ff8 and "
+       "turned redundant JPN defines into redirects to undeclared names: the JPN build stopped compiling")
+def _rename_respects_region_blocks():
+    ns = {"rewrite": load("regionblocks").rewrite}
+    renames = {"func_020c2208": "Mat4x4_ConvertTo4x3", "func_020c552c": "_Z24SubmitBlock0x80IfNotBusyi",
+               "func_020c6ff8": "_Z18MarkGBABusReleasedv"}
+    pat = re.compile(r"\b(%s)\b" % "|".join(map(re.escape, renames)))
+    jpn = {"func_020c3cd4": "Mat4x4_ConvertTo4x3", "func_020c6ff8": "func_020c6ff8"}
+    text = ("#if defined(jpn)\n#define func_020c2208 func_020c3cd4\n#define func_020c552c func_020c6ff8\n"
+            "#endif\nvoid f() { func_020c2208(); func_020c6ff8(); }\n")
+    out, _n = ns["rewrite"](text, pat, renames, lambda region, raw: jpn.get(raw))
+    want = ("#if defined(jpn)\n#define _Z24SubmitBlock0x80IfNotBusyi func_020c6ff8\n"
+            "#endif\nvoid f() { Mat4x4_ConvertTo4x3(); _Z18MarkGBABusReleasedv(); }\n")
+    if out != want:
+        return "rewrote a region block wrongly:\n" + out
+
+
 STAMP = f"{SP}/wlog/functional_stamp.txt"
 
 

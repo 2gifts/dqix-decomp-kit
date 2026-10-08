@@ -20,6 +20,7 @@ Usage: python rename_symbols.py <old-rev> [<new-rev>]     new-rev defaults to th
 import os as _kpos, sys as _kpsys
 _kpsys.path.insert(0, _kpos.path.dirname(_kpos.path.abspath(__file__)))
 import kitpaths as _kp
+import regionblocks
 import os
 import re
 import subprocess
@@ -108,13 +109,7 @@ for root, _, names in [rn for d in ("src", "include") for rn in os.walk(d)]:
         text = open(p, encoding="utf-8", errors="replace").read()
         # Never rewrite the `// USA: func_...` marker: it is the file's identity, and every tool
         # maps file -> address through it.
-        lines, n = text.split("\n"), 0
-        for k, ln in enumerate(lines):
-            if re.match(r"\s*//\s*USA:", ln, re.I):
-                continue
-            lines[k], c = pat.subn(lambda m: renames[m.group(1)], ln)
-            n += c
-        newtext = "\n".join(lines)
+        newtext, n = regionblocks.rewrite(text, pat, renames)
         if n:
             open(p, "w", encoding="utf-8", newline="\n").write(newtext)
             hits += n

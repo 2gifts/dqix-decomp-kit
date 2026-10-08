@@ -32,6 +32,7 @@ Usage: python relink_undefined.py <mwldarm-log>
 import os as _kpos, sys as _kpsys
 _kpsys.path.insert(0, _kpos.path.dirname(_kpos.path.abspath(__file__)))
 import kitpaths as _kp
+import regionblocks
 import collections
 import os
 import re
@@ -435,11 +436,7 @@ for name in sorted(set(UNDEFINED)):
                 # every tool maps file -> address through it -- and renaming a callee must not
                 # change which function the file claims to be. Caught 08-18 after this pass
                 # turned a marker into `// USA: _Z22ClearBitRange_021f6c3cPvjjj`.
-                lines = text.split("\n")
-                for k, ln in enumerate(lines):
-                    if not re.match(r"\s*//\s*USA:", ln):
-                        lines[k] = re.sub(r"\b%s\b" % re.escape(s), cur, ln)
-                text = "\n".join(lines)
+                text, _n = regionblocks.rewrite(text, re.compile(r"\b(%s)\b" % re.escape(s)), {s: cur})
         if mem:
             hdr = header_for(mem[0])
             if hdr and hdr not in text:

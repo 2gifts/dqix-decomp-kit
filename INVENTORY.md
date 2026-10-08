@@ -17,7 +17,7 @@ file that does not exist, nothing keys symbol lookups on the `func_` name, nothi
 | `kitpaths.py [kit\|state\|repo]` | `KIT` (this checkout: code only), `SP` (the state directory outside it: `$DQIX_STATE`, else `state.path`, else `../dqix-kit-state`), `REPO` (`$DQIX_REPO`, default `../dqix-decomp`), `CLAUDE_PROJECTS`; every script reads its paths here, shell scripts through the CLI |
 | `export_priors.py <source-sp> [-j N] [--dry-run]` | gate every saved attempt at an unmatched function in a pipeline directory's pools and keep the closest per address in `priors/<main\|ovNNN>/<addr>.cpp` + `priors/INDEX.tsv`; `resumable.py` reads `priors/` as a pool, so a fresh kit starts from the work already paid for |
 | `regress_fixtures/` | the prior sources `regress.py --slow` cracks end to end |
-| `kit_update.py` | fetch the published kit and fast-forward to it, print `RE-READ` for every changed agent instruction file, re-run `kit_init.py` (`--slow` when the gate or its tests changed); refuses while the fleet or an integration runs (exit 2) or while local changes or commits block a fast-forward (exit 3). `AGENTS.md` and the plan/continue/hand-match skills run it before any work |
+| `kit_update.py [--hook]` | fetch the published kit and move onto it, keeping your unpublished commits on top (rebase; a conflict aborts with exit 3), print `RE-READ` for every changed agent instruction file, re-run `kit_init.py` (`--slow` when the gate or its tests changed); refuses while the fleet or an integration runs (exit 2) or while tracked files are modified (exit 3). `.claude/settings.json` runs it on SessionStart and, with `--hook`, on every Stop: exit always 0, and a JSON block makes the agent re-read changed instructions. `kitpaths.py` warns `KIT IS N COMMIT(S) BEHIND` (fetch at most every 10 min, silent while busy; `DQIX_NO_FRESHNESS=1` turns it off) |
 | `kit_init.py [--refs] [--slow]` | check dependencies and the decomp checkout, create the state directories and `OPEN_WORK.md`, build the worker docs, copy the agent-neutral skills (`PORTABLE_SKILLS`) from `.claude/skills/` to `.agents/skills/` for Codex and other Agent Skills readers; `--refs` clones and indexes `refs/VERIFIED.txt`, `--slow` runs `regress.py --slow` |
 
 ---
@@ -406,7 +406,8 @@ but not in a baseline report)
 |---|---|---|
 | `pull_all.sh` | budget-driven pull dispatcher: `PULL_SLOTS` / `PULL_BUDGET` live knobs | superseded `run_all.sh` as the way work is dispatched |
 | `pull_worker.sh` | spawn ONE worker on a claimed address, record verdict + cost | |
-| `claim.py` | atomic address claiming (`mkdir`), TTL reaping, `--status` / `--release` | |
+| `claim.py` | atomic address claiming (`mkdir`), TTL reaping, `--status` / `--release`; serves nothing (exit 3) while the kit is behind and no fleet or integration runs | |
+| `regionblocks.py` | the rename used by `rename_symbols.py` and `relink_undefined.py`: inside `#if defined(jpn\|eur)` only a define's name is renamed, never its target address, and a define the region's config already binds is dropped | `regress.py` replays the JPN break |
 | `pullstat.py` | per-band stats and `--alerts` | |
 | `integrate_fast.sh` | clear the whole staged backlog with ONE build; on red, cull the culprits the log names and rebuild (3 rounds), then per-module fallback | |
 | `culprits.py <log> [--cull]` | name the candidates a red build log blames (compile error, duplicate or undefined symbol, missing object, malformed config line, unplaced object); `--cull` moves their staged copies to `hold_<mod>` | `ov_recover` culls them before any bisection; `regress.py` covers each class |
