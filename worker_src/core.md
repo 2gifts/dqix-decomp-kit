@@ -921,6 +921,14 @@ Two levers, in this order:
 - `unsigned short saved = f->x; f->x |= 0x4800;` instead of an int temp + cast stops the u16
   truncation sinking to the store (`02037934`).
 
+## SCALAR AGGREGATE INITIALIZATION — check unexpected clearing calls
+If `{0}` on a one-member stream creates an extra clear call while the target stores only its
+pointer, initialize that genuine member explicitly. At `main:020211b0`, explicit `stream.ptr = 0`,
+key-count initialization before the real key-array clear, and table fields read at their use sites
+jointly closed OVERGEN16 to MATCH484 with all 11 calls intact. These three edits were tested
+together, so do not attribute the whole change to one edit. Preserve every initialized field and
+the real clear span; do not remove initialization, invent fields or alter a helper's interface.
+
 ## SIGNED-HALFWORD ROUNDING — retain the narrowing point and store once
 When rounding a signed-halfword member before adding an independent adjustment, keep the rounded
 value in a real `short` local, then perform the final member store once. At `main:0205cc50`,
