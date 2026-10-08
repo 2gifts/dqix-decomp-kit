@@ -4,6 +4,15 @@ backslash escapes, `$` inside a string. The failure is a truncated or missing fi
 `unexpected EOF while looking for matching`. Shell redirection is fine only for a one-liner like
 `echo ok > flag.txt`.
 
+## NATURAL CAPABILITY MASK UPDATES CAN STEER INDEPENDENT STORES
+On a genuine ordinary flag word, try the device's constituent capability updates instead of one
+combined mask when the remaining residue is an independent store/literal-load exchange. In
+`020d0078` (900 bytes), replacing `|= 0xd000` with consecutive `|= 0x1000; |= 0xc000;` and both
+`|= 0x5000` sites with `|= 0x1000; |= 0x4000;` closed SCHED18 under stock flags. This is one measured
+three-site result, not three isolated ablations. Preserve the genuine unsigned descriptor, native
+72-byte specification and canonical shared command; verify every allocated byte and real relocation.
+Do not apply this to volatile/MMIO words, observable intermediate updates or unknown aliases.
+
 ## YOUR FUNCTION GOES IN THE `wip/` DIR YOUR PROMPT NAMES — NEVER IN `src/`
 The build globs every `.cpp` under `src/`, so an in-progress file there — a `goto` whose label you
 have not typed yet — fails `ninja check` for EVERY module and every other worker, and an integration
