@@ -9,10 +9,17 @@ Two repositories take contributions:
 
 ## Avoid duplicate work
 
-`claim.py` claims are local to one machine. Before starting, open an issue in the kit repository
-naming the module or address range you are taking, for example `ov017 021bb000-021bc000` or
-`main 0205faf4`. Check open issues first and skip ranges someone holds. Close the issue when the
-work lands or you stop.
+`claim.py` claims are local to one machine. Check the open issues in the kit repository first and
+skip every address someone holds. Then keep ONE open issue for everything you are actively working
+on, never one per function:
+
+1. Open a single issue listing each address you are taking, one per line (`main 0205faf4`,
+   `ov017 021bb000-021bc000`).
+2. Edit that issue as you add or drop addresses.
+3. When the work is done and its pull request is open, close the issue with a comment naming the
+   pull request (`Landed in ZevyaDev/dqix-decomp#27`). If you stop without a pull request, close it
+   saying so.
+4. Open a new issue for the next batch.
 
 ## Matched functions
 

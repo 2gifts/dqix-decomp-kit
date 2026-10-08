@@ -106,3 +106,8 @@ the user asks.
     `regress.py` proof, or decline it in `levers_declined.txt`. On a miss, record the blocker with
     `blocker.py` and what was ruled out in `deadends.md`. The dispatcher stops claiming until this is
     done. [docs/IMPROVEMENT_LOOP.md](docs/IMPROVEMENT_LOOP.md) has the whole loop.
+20. Reserve work with ONE open issue in the kit repository listing every address you are actively
+    working on, never one issue per function; skip addresses another open issue holds. Edit it as
+    the list changes. When the pull request is open, close the issue with a comment naming it
+    (`Landed in ZevyaDev/dqix-decomp#27`), then open a new issue for the next batch.
+    [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) has the steps.
