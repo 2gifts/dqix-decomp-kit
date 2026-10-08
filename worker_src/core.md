@@ -960,6 +960,16 @@ compare an already matched sibling's access path while retaining canonical membe
 `main:02024d94`, these changes exposed UNDERGEN4 from SHAPE109, then restored MATCH228 with the
 existing two-stage grotto accessor; all 14 calls and both pool words resolve exactly.
 
+## RELATIVE FILE OFFSETS — add through the byte pointer
+When a record word is proven to store a relative byte offset, add it to the allocation's genuine
+`char*` base before converting the resulting pointer to the existing address-word type. At
+`main:02042804`, `reinterpret_cast<int>(base + entry.val)` closes REGPERM2 to MATCH320;
+`reinterpret_cast<int>(base) + entry.val` keeps the reversed ADD operands. The slow paired fixture
+checks all 320 linked bytes, the sole export and all 13 real relocation targets; its integer-add
+counterfactual differs only at +0xa8/+0xaa. Keep the actual field/output types and well-formed
+resource-offset assumptions. This is not a rewrite for arbitrary integer sums or a reason to
+invent pointer fields.
+
 ## STREAM HEADER AND PAYLOAD ALIGNMENT — preserve definition order
 Advance the stream past the entry header before computing its variable payload size. Keep alignment
 as `(payloadSize + alignmentMask) & ~alignmentMask`, without a separate complement local. These
