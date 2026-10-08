@@ -114,6 +114,9 @@ def repair(path, module, addr, _no_rename=False):
                 continue                      # never touch this file's own function
             real = syms.get(a)
             if real and real != ident:
+                from pad.repool import canonical_declaration, plain
+                if plain(real) == ident and canonical_declaration(out, ident, real):
+                    break                     # ordinary C++ already emits this binding
                 renames[ident] = real
                 break
     for old, new in renames.items():

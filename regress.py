@@ -1527,6 +1527,117 @@ def _placement():
 
 # ---------------------------------------------------------------- autorepair.py
 
+def autorepair_cpp_regression(autorepair_path, scratch_parent, canonical_source=None):
+    """Exercise the production repair, stubbing existing compiler/gate probes only."""
+    import importlib.util
+    from pathlib import Path
+    import subprocess
+    import tempfile
+    from types import SimpleNamespace
+    from unittest.mock import patch
+    from pad.repool import canonical_declaration
+
+    spec = importlib.util.spec_from_file_location('_autorepair_cpp_regression', autorepair_path)
+    repair = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(repair)
+    scratch_parent = Path(scratch_parent).resolve()
+    scratch_parent.mkdir(parents=True, exist_ok=True)
+    own, setter = 'func_020b0594', '_Z26SetIntArrayElement020b0334Piii'
+    canonical = canonical_source or (
+        'void SetIntArrayElement020b0334(int* array, int index, int value);\n'
+        '// USA: func_020b0594\n'
+        'extern "C" ARM void func_020b0594(int resource, int offset, int tier, void* object) {\n'
+        '    SetIntArrayElement020b0334((int*)object, tier, offset);\n}\n')
+    assert canonical_declaration(canonical, 'SetIntArrayElement020b0334', setter)
+    # The fixture asserts only the spelling transformation. Existing compiler/gate
+    # probes are controlled here; genuine retained-object proof is kept separately.
+    probes = {'export': 0, 'gate': 0}
+
+    def emits(text_or_path, want):
+        assert want == own
+        probes['export'] += 1
+        return True
+
+    def gate(command, **keywords):
+        assert Path(command[1]).name == 'wgate.py', command
+        probes['gate'] += 1
+        return SimpleNamespace(stdout='MATCH\n', stderr='', returncode=0)
+
+    with tempfile.TemporaryDirectory(prefix='autorepair canonical cpp ', dir=scratch_parent) as temporary:
+        root = Path(temporary).resolve()
+        assert root.parent == scratch_parent
+
+        def run(name, source):
+            path = root / (name + '.cpp')
+            path.write_text(source, encoding='utf-8', newline='\n')
+            repairs = repair.repair(str(path), 'main', '020b0594')
+            return path.read_text(), repairs
+
+        with patch.object(repair, '_symbols', return_value={'020b0594': own, '020b0334': setter}), \
+             patch.object(repair, '_all_symbol_names', return_value={own, setter, '_Z8PlainCppPi'}), \
+             patch.object(repair, '_code_section_for', return_value='text'), \
+             patch.object(repair, '_text_emits', side_effect=emits), \
+             patch.object(repair, '_emits_symbol', side_effect=lambda path, want: (emits(path, want), '')), \
+             patch.object(subprocess, 'run', side_effect=gate):
+            repaired, changes = run('canonical', canonical)
+            assert repaired == canonical, 'canonical setter declaration/call was rewritten: ' + str(changes)
+            assert changes == [], changes
+
+            wrong = canonical.replace('SetIntArrayElement020b0334', 'WrongSetter020b0334')
+            repaired, changes = run('wrong_name', wrong)
+            assert setter in repaired and 'WrongSetter020b0334(' not in repaired
+            assert 'extern "C" void ' + setter in repaired
+
+            declaration = next(line for line in canonical.splitlines() if line.startswith('void SetIntArrayElement020b0334('))
+            stale = canonical.replace(declaration, declaration.replace('int*', 'LegacyArray*').replace('int *', 'LegacyArray *'))
+            repaired, changes = run('stale_nominal', stale)
+            assert setter in repaired and 'SetIntArrayElement020b0334(' not in repaired
+
+            overload = canonical.replace(declaration, 'void SetIntArrayElement020b0334(int unrelated);')
+            repaired, changes = run('unrelated_overload', overload)
+            assert setter in repaired and 'SetIntArrayElement020b0334(' not in repaired
+
+            mixed = canonical.replace(declaration, declaration + '\nvoid SetIntArrayElement020b0334(int unrelated);')
+            repaired, changes = run('mixed_overloads', mixed)
+            assert setter in repaired and 'SetIntArrayElement020b0334(' not in repaired
+
+            unsupported = canonical.replace(declaration, 'void SetIntArrayElement020b0334(const int& array, int index, int value);')
+            repaired, changes = run('unsupported_reference', unsupported)
+            assert setter in repaired and 'SetIntArrayElement020b0334(' not in repaired
+
+            literal = canonical.replace(declaration, 'extern "C" ' + declaration.replace('SetIntArrayElement020b0334', setter))
+            literal = literal.replace('SetIntArrayElement020b0334(', setter + '(')
+            repaired, changes = run('literal_mangled', literal)
+            assert repaired == literal and changes == []
+
+            c_linkage = canonical.replace(declaration, 'extern "C" ' + declaration)
+            repaired, changes = run('wrong_c_linkage', c_linkage)
+            assert setter in repaired and 'SetIntArrayElement020b0334(' not in repaired
+
+            plain_cpp = canonical.replace(declaration, 'extern "C" int PlainCpp(int* array);')
+            plain_cpp = plain_cpp.replace('SetIntArrayElement020b0334((int*)object, tier, offset)', 'PlainCpp((int*)object)')
+            # The whole genuine source uses state->offsets rather than the compact
+            # fixture expression; replace that call too when running the retained case.
+            plain_cpp = plain_cpp.replace('SetIntArrayElement020b0334(state->offsets, tier, offset)', 'PlainCpp(state->offsets)')
+            repaired, changes = run('existing_cpp_linkage', plain_cpp)
+            assert 'extern "C" int PlainCpp(' not in repaired and 'int PlainCpp(' in repaired
+            assert any('dropped extern "C"' in change for change in changes)
+
+    return {'canonical_setter_retained': True, 'wrong_names_still_repair': True,
+            'stale_nominal_and_unrelated_mixed_overloads_still_repair': True,
+            'unsupported_forms_fail_closed': True, 'literal_mangled_binding_retained': True,
+            'existing_C_to_CPP_linkage_repair_retained': True,
+            'compiler_and_gate_probes_controlled': probes, 'compiler_invocations': 0}
+
+
+@check('autorepair preserves a genuine flat C++ callee declaration and call',
+       '020b0594 matched with SetIntArrayElement020b0334(int*,int,int), but landing changed it '
+       'to a raw extern-C mangled alias despite its already-correct configured binding')
+def _autorepair_current_cpp_names():
+    autorepair_cpp_regression(f'{KIT}/autorepair.py', os.path.join(SP, 'handwork'))
+    return None
+
+
 @check("autorepair drops extern \"C\" on a callee the ROM mangles, and reverts only the renames",
        "ov017:021ab280 was BYTE-EXACT and parked as UNDEF-SYM because one prototype said "
        "`extern \"C\" int Vec3LengthRounded(int*)` while the ROM symbol is _Z17Vec3LengthRoundedPi; "
