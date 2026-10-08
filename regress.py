@@ -1884,7 +1884,7 @@ def _linked_fixture_object(text, address, size, export, expected, *, rom_size=No
                and isinstance(symbol["st_shndx"], int) and elf.get_section(symbol["st_shndx"])["sh_flags"] & 2]
     assert exports == [export], "fixture gained a runtime export"
     undefined = {symbol.name for symbol in table.iter_symbols() if symbol.name and symbol["st_shndx"] == "SHN_UNDEF"}
-    assert undefined == {row[2] for row in expected}, "fixture helper/data identities changed"
+    assert undefined == ({row[2] for row in expected} - set(exports)), "fixture helper/data identities changed"
     linked, relocations, seen = bytearray(section.data()), [], set()
     for relsec in elf.iter_sections():
         if relsec["sh_type"] not in ("SHT_REL", "SHT_RELA") or relsec["sh_info"] != index:
@@ -1926,6 +1926,24 @@ def _linked_fixture_object(text, address, size, export, expected, *, rom_size=No
     return {"linked": bytes(linked), "target": target, "relocations": sorted(relocations),
             "section_index": index, "exports": exports, "undefined": sorted(undefined),
             "size": len(linked), "rom_size": rom_size, "rom_offsets": rom_offsets}
+
+
+def _recursive_fixture_export():
+    """A recursive call binds the defined export rather than an undefined helper."""
+    import buildcfg
+    if buildcfg.REGION != "usa":
+        return "the main:02056c3c compiler fixture requires DQIX_REGION=usa"
+    source = open(f"{KIT}/regress_fixtures/RecursiveSort_02056c3c.cpp", encoding="utf-8").read()
+    expected = [
+        (0x38, 1, "_fls", 0x0200c088, -8),
+        (0x54, 1, "_fgr", 0x0200bfc4, -8),
+        (0xb0, 1, "func_02056c3c", 0x02056c3c, -8),
+        (0xcc, 1, "func_02056c3c", 0x02056c3c, -8),
+    ]
+    linked = _linked_fixture_object(source, 0x02056c3c, 212, "func_02056c3c", expected)
+    assert linked["linked"] == linked["target"], "recursive fixture no longer matches all 212 ROM bytes"
+    assert linked["undefined"] == ["_fgr", "_fls"], "recursive export became an undefined helper"
+    return None
 
 
 def _relative_byte_offset():
@@ -2138,6 +2156,9 @@ def run_functional():
     check("external getter local and nested null guard retain exact CMP operand order",
           "main:02026bdc is REGPERM2 with the measured compound direct-getter guard and MATCH736 "
           "with the combined local/nested form; both preserve all15 calls including overlay17")(_external_getter_comparison)
+    check("recursive calls use the fixture's own defined export",
+          "main:02056c3c has two external comparisons and two recursive calls; all four real "
+          "PC24 targets and all 212 ROM bytes must be checked without classifying the export as undefined")(_recursive_fixture_export)
     bad = 0
     for module, addr, prior, expected, budget, what in FUNCTIONAL:
         src = os.path.join(KIT, prior)
@@ -2188,7 +2209,8 @@ def sweep_fingerprint():
     for p in ("colorsweep.py", "wdiff.py", "wgate.py", "regress.py",
               "regress_fixtures/RelativeByteOffset_02042804.cpp",
               "regress_fixtures/DefiniteYawDistance_02041378.cpp",
-              "regress_fixtures/ExternalGetterComparison_02026bdc.cpp"):
+              "regress_fixtures/ExternalGetterComparison_02026bdc.cpp",
+              "regress_fixtures/RecursiveSort_02056c3c.cpp"):
         try:
             h.update(open(f"{KIT}/{p}", "rb").read())
         except OSError:
