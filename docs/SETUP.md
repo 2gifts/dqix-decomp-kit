@@ -99,7 +99,7 @@ All of these are under the state directory `$SP`, never under the checkout.
 | `scaffold/` | generated starting files |
 | `doc_cache/` | per-function worker docs |
 | `attempts/`, `quarantine/`, `hold_<module>/` | preserved attempts and sources swept aside by integration |
-| `claims/` | one directory per claimed address; `claims/INTEGRATING` names the module being landed |
+| `claims/` | one directory per claimed address; `claims/INTEGRATING` lists the modules being landed |
 | `wlog/` | logs, per-address gate history (`wlog/gates/`), `blockers.tsv`, `levers.tsv`, priority queues |
 | `priors/` | shipped: the closest saved attempt per unmatched address, listed in `priors/INDEX.tsv` |
 | `refs/` | reference decompilations |

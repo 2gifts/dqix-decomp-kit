@@ -207,21 +207,27 @@ One module:
 
 `finish_wave.sh <main|NNN>`:
 
-1. takes `$SP/wave.lock` (waits up to 5 hours; clears a lock whose recorded owner is dead)
+1. takes `$SP/wave.lock` (waits up to 5 hours; clears a lock whose recorded owner is dead) and moves
+   the integration worktree (`integ_tree.py sync`) to the tip of `decomp-matching`; every later step
+   runs there, never in the decomp checkout
 2. drops skiplisted addresses from staging; **reverts every uncommitted change to tracked files
-   under `include/`, `config/` and `src/` of the decomp**; moves untracked `.cpp` of other modules to
+   under `include/`, `config/` and `src/` of the integration worktree**; moves untracked `.cpp` of other modules to
    `quarantine/`; drops staged files whose address is already committed; copies the rest of
    `staging/<module>/` into the module's source directory
 3. runs `ov_recover.py`: snapshots every candidate to `hold_<module>/`, classifies, wires
    `symbols.txt`, `delinks.txt` and `relocs.txt` through `integrate.py`, gates with `ninja check`,
-   bisects and culls on red, commits what is green
+   on red culls what the log names (`culprits.py`), retries a crashed tool once, otherwise culls
+   drift or bisects; commits what is green
 4. runs `ninja check`, `ninja rom`, `ninja sha1`, then `countfix.py`
-5. pushes `origin decomp-matching` only if HEAD is on `decomp-matching` and moved
+5. `integ_tree.py publish`: pushes the new commits to `origin decomp-matching` and fast-forwards the
+   decomp checkout
 6. prints one line: `OK <module>: +N delinked ...`, `RED: ...` or `FATAL: ...`
 
 Commit any header or config change your source needs to `decomp-matching` first, with `ninja check`
-green; otherwise step 2 reverts it. It runs 10 minutes or more. From an AI session, launch it as a
-background task with a long timeout and pass the command plain (no `nohup`, no trailing `&`).
+green; integration builds from the last commit in its own worktree and never sees uncommitted
+edits. A wave takes a few minutes, more the first time the worktree builds. From an AI session,
+launch it as a background task with a long timeout and pass the command plain (no `nohup`, no
+trailing `&`).
 
 Several modules at once:
 

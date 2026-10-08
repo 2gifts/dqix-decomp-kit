@@ -11,7 +11,7 @@ only; requires the `claude` CLI on PATH and logged in. Commands run from the kit
     └── pull_all.sh               keeps PULL_SLOTS slots busy; every 30 s refills, integrates, sweeps
         ├── pull_worker.sh <mod> <slot>    claim -> scaffold -> presweep -> doc -> one `claude -p` session -> verdict
         │   └── gatewatch.sh               kills a session still gating GATEWATCH_GRACE (180) s after the STOP banner
-        ├── finish_wave.sh <mod>           detached, one module at a time, module named in claims/INTEGRATING
+        ├── integrate_all.sh               detached: finish_wave.sh for every staged module, in the integration tree
         ├── repairsweep.py                 detached, every SWEEP_EVERY seconds: re-gates parked sources
         ├── presweep_watch.sh              colorsweeps the addresses about to be claimed
         └── progress.py                    rewrites STATE.md every STATE_EVERY seconds
@@ -125,10 +125,12 @@ refilling slots and `claim.py` serves nothing while either fails; integration co
 
 ## Integration
 
-Slots only produce gated source. `pull_all.sh` runs `finish_wave.sh` detached for the module with the
-most staged files, every `INTEGRATE_EVERY` seconds or once `INTEGRATE_PENDING` files are staged,
-rotating the last module to the back. The module is written to `claims/INTEGRATING` and `claim.py`
-steers new slots elsewhere until it clears. `finish_wave.sh` holds `wave.lock` for the whole run.
+Slots only produce gated source. Every `INTEGRATE_EVERY` (600) seconds, or once `INTEGRATE_PENDING`
+files are staged, `pull_all.sh` runs `integrate_all.sh` detached: `finish_wave.sh` for every module
+with staged work, biggest first. Each runs in the integration worktree (`python integ_tree.py path`),
+pushes, and fast-forwards the decomp checkout, so slots, sweeps and hand gating carry on meanwhile.
+`finish_wave.sh` holds `wave.lock` for the whole run. A red gate costs one more build when the log
+names the culprit (`culprits.py`); only an unnamed red bisects.
 
 - One integration at a time. Never start `finish_wave.sh`, `integrate_fast.sh` or `integrate.py`
   (even `--dry`) by hand while `wave.lock` exists.
