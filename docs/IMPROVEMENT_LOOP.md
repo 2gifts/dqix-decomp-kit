@@ -94,7 +94,8 @@ in `core.md` but not in the built doc has not been delivered, so grep the built 
 3. Promote the lever into the most automatic home in §3, with its proof.
 4. `python $KIT/selfcheck.py` and `python $KIT/regress.py` (`--slow` if `colorsweep.py`, `wdiff.py`
    or `wgate.py` changed).
-5. Commit the kit change and open a pull request on ZevyaDev/dqix-decomp-kit in the same session
-   (`docs/CONTRIBUTING.md`). Your own `kit_update.py` keeps the commit on top while it waits; once
+5. Commit the kit change, pull both checkouts, run `python $KIT/prready.py kit` until it prints
+   `READY` (AGENTS.md rule 21), and open a pull request on ZevyaDev/dqix-decomp-kit in the same
+   session (`docs/CONTRIBUTING.md`). Your own `kit_update.py` keeps the commit on top while it waits; once
    merged, every other agent's next stop carries it. A promotion that never leaves your machine is
    not finished.

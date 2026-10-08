@@ -1366,6 +1366,81 @@ def _rela_addend():
     return None
 
 
+@check("prready.py refuses a pull request built on a stale kit or decomp, and passes a current one",
+       "pull requests built on stale checkouts reverted the CI workflow, re-added a file for an address "
+       "another file owned, renamed a symbol in one region only, recorded dead ends for matched "
+       "functions and cited matches that never landed")
+def _prready():
+    import subprocess
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as d:
+        def git(repo, *args):
+            r = subprocess.run(["git", "-C", repo, "-c", "user.name=t", "-c", "user.email=t@t",
+                                "-c", "core.autocrlf=false", *args], capture_output=True, text=True)
+            if r.returncode:
+                raise RuntimeError(f"git {' '.join(args)}: {r.stderr.strip()}")
+
+        def commit(repo, files):
+            for path, text in files.items():
+                os.makedirs(os.path.dirname(os.path.join(repo, path)), exist_ok=True)
+                with open(os.path.join(repo, path), "w", encoding="utf-8", newline="\n") as fh:
+                    fh.write(text)
+            git(repo, "add", "-A")
+            git(repo, "commit", "-qm", "x")
+
+        pub_decomp, pub_kit, decomp, kit = (f"{d}/{n}" for n in ("pub_decomp", "pub_kit", "decomp", "kit"))
+        for repo, branch in ((pub_decomp, "decomp-matching"), (pub_kit, "main")):
+            os.makedirs(repo)
+            git(repo, "init", "-q", "-b", branch)
+        commit(pub_decomp, {
+            ".github/workflows/match.yml": "on: push\n",
+            "config/usa/arm9/delinks.txt": "    .text       start:0x02000000 end:0x02001000 kind:code align:32\n\n"
+                                           "src/A.cpp:\n    complete\n    .text start:0x02000010 end:0x02000020\n",
+            "config/usa/arm9/symbols.txt": "Foo kind:function(arm,size=0x10) addr:0x02000010\n",
+            "config/eur/arm9/symbols.txt": "Foo kind:function(arm,size=0x10) addr:0x02000010\n",
+            "src/A.cpp": "void Foo() {}\n"})
+        commit(pub_kit, {n: open(f"{KIT}/{n}", encoding="utf-8").read()
+                         for n in ("prready.py", "delinked.py", "kitpaths.py")}
+               | {"worker_src/deadends.md": "# dead ends\n", "worker_src/core.md": "# core\n"})
+        git(d, "clone", "-q", pub_decomp, decomp)
+        git(d, "clone", "-q", pub_kit, kit)
+        env = dict(os.environ, DQIX_KIT_URL=pub_kit, DQIX_KIT_BRANCH="main", DQIX_DECOMP_URL=pub_decomp,
+                   DQIX_DECOMP_BRANCH="decomp-matching", DQIX_REPO=decomp, DQIX_STATE=f"{d}/state")
+
+        def prready(*args, stdin=None):
+            r = subprocess.run([sys.executable, f"{kit}/prready.py", *args], env=env, input=stdin,
+                               capture_output=True, text=True)
+            return r.returncode, r.stdout + r.stderr
+
+        for mode in ("kit", "decomp"):
+            code, out = prready(mode)
+            if code != 0:
+                return f"a current checkout was refused by prready.py {mode}: {out.strip()[-300:]}"
+        commit(decomp, {".github/workflows/match.yml": "on: pull_request\n",
+                        "src/Dead.cpp": "void Dead() {}\n",
+                        "config/usa/arm9/symbols.txt": "Bar kind:function(arm,size=0x10) addr:0x02000010\n"})
+        commit(kit, {"worker_src/deadends.md": "# dead ends\n02000010\tstale\n02000040\topen\n",
+                     "worker_src/core.md": "# core\nrule (02000010)\nrule (02000400)\n"})
+        commit(pub_decomp, {"src/A.cpp": "void Foo() { }\n"})
+        commit(pub_kit, {"README.md": "x\n"})
+        want = {"decomp": ("KIT BEHIND", "DECOMP BEHIND", "OUTSIDE A MATCH .github/workflows/match.yml",
+                           "DEAD FILE src/Dead.cpp", "HALF RENAME Foo"),
+                "kit": ("KIT BEHIND", "STALE DEAD END 02000010", "UNPROVEN CITATION 02000400")}
+        for mode, needles in want.items():
+            code, out = prready(mode)
+            missing = [n for n in needles if n not in out]
+            if code != 1 or missing:
+                return f"prready.py {mode}: exit {code}, missing {missing}: {out.strip()[-400:]}"
+            if mode == "kit" and ("02000040" in out or "CITATION 02000010" in out):
+                return f"prready.py kit flagged an open dead end or a landed citation: {out.strip()[-400:]}"
+        code, out = prready("--hook", stdin=json.dumps({"tool_input": {"command": "gh pr create -R ZevyaDev/dqix-decomp"}}))
+        if code != 2 or "HALF RENAME" not in out:
+            return f"the hook let gh pr create through on a stale decomp: exit {code}"
+        code, out = prready("--hook", stdin=json.dumps({"tool_input": {"command": "git status"}}))
+        if code != 0:
+            return f"the hook blocked a command that opens no pull request: exit {code} {out.strip()[-200:]}"
+    return None
+
+
 # ------------------------------------------------------- END-TO-END (slow, compiles)
 # The tests above pin what each rewrite RENDERS. They cannot tell you whether the sweep still
 # CRACKS a function: adding a rule enlarges the neighbourhood, so a winning path that used to fit

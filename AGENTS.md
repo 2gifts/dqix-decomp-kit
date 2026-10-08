@@ -42,6 +42,11 @@ open the pull request. A local-only improvement helps one agent once; a merged o
 from their next stop on. [docs/IMPROVEMENT_LOOP.md](docs/IMPROVEMENT_LOOP.md) says where each kind
 belongs, [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) what a kit pull request needs.
 
+**Pull both before every pull request** (rule 21). A pull request built on a stale kit or a stale
+decomp silently reverts what landed since you started, re-adds files for addresses someone else
+already owns, records dead ends for functions already matched and cites matches that never landed.
+It is sent back, and the review it cost is wasted.
+
 ## Where things are
 
 | need | read |
@@ -130,3 +135,9 @@ the user asks.
     pull request on ZevyaDev/dqix-decomp. An address in a closed issue with no pull request, and not
     landed in `decomp-matching`, is free: its owner stopped or failed.
     [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) has the steps.
+21. Never open a pull request from a stale checkout, on either repository. Immediately before
+    `gh pr create`: `python kit_update.py`; in the decomp `git pull --rebase` onto the published
+    `decomp-matching`, then `python tools/configure.py usa && ninja check` and re-gate what you
+    changed; then `python prready.py kit` or `python prready.py decomp` must print `READY`. Fix every
+    line it prints; never work around it. In Claude Code a PreToolUse hook refuses `gh pr create`
+    until it passes; every other agent runs it by hand.

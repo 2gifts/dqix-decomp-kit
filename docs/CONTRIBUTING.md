@@ -34,8 +34,17 @@ Keep ONE open issue for everything you are actively working on, never one per fu
 2. Start from the current branch: `git pull --rebase zevya decomp-matching` on a clean tree.
 3. Match and land as in [WORKFLOW.md](WORKFLOW.md). `finish_wave.sh` commits and pushes to your
    fork's `decomp-matching`.
-4. Open a pull request from your fork's `decomp-matching` against `ZevyaDev/dqix-decomp`
-   `decomp-matching`.
+4. Pull both again, right before the pull request, every time (AGENTS.md rule 21):
+
+       python kit_update.py                                  # in the kit
+       git pull --rebase zevya decomp-matching               # in the decomp; rebase, never merge
+       python tools/configure.py usa && ninja check
+       python prready.py decomp                              # in the kit; must print READY
+
+   Push the rebased branch to your fork (`git push --force-with-lease origin decomp-matching`).
+5. Open a pull request from your fork's `decomp-matching` against `ZevyaDev/dqix-decomp`
+   `decomp-matching`. Send the next batch on a new branch and pull request; never add commits to
+   one already open.
 
 A pull request is accepted when:
 
@@ -48,10 +57,9 @@ A pull request is accepted when:
 - the source reads like code a developer wrote: typed structs and members, no comments beyond the
   `// USA:` tag unless a line needs one
 - it changes nothing outside the functions it lands, apart from header or config changes those
-  functions need
-
-Rebase on `zevya/decomp-matching` before opening the pull request and run
-`python tools/configure.py usa && ninja check` again after the rebase.
+  functions need; never `.github/`, `tools/` or another file a merge resolved to your older copy
+- a symbol renamed in one region's `symbols.txt` is renamed in every region that has it
+- `python prready.py decomp` prints `READY` against the current `decomp-matching`
 
 A near miss is not a pull request to the decomp. If you spent real effort ruling forms out, send a
 row for `worker_src/deadends.md` to the kit; if you found a lever, send the rule (below).
@@ -66,11 +74,17 @@ that found it. Where each belongs and what proof it needs: [IMPROVEMENT_LOOP.md]
 2. Push to your fork of the kit and open the pull request against `ZevyaDev/dqix-decomp-kit` `main`
    (`gh pr create -R ZevyaDev/dqix-decomp-kit`).
 
-Before opening it:
+Before opening it, in this order, every time (AGENTS.md rule 21):
 
+    python kit_update.py           # your commits are rebased onto the published kit
+    git -C "$(python kitpaths.py repo)" pull --rebase zevya decomp-matching
     python selfcheck.py
     python regress.py              # add --slow after touching colorsweep.py, wdiff.py or wgate.py
     python pipetest.py             # after touching wgate.py, classify.py or integrate.py
+    python prready.py kit          # must print READY
+
+`prready.py kit` refuses a dead-end row for an address already matched and a `core.md` rule citing an
+address that is not landed: land the match first, then send the rule.
 
 - A new script gets a line in `INVENTORY.md`; `selfcheck.py` fails on an uninventoried script.
 - A fix for a fault that happened gets a `regress.py` case that fails without the fix.

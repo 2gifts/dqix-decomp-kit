@@ -62,6 +62,20 @@ def _kit_hooks():
     return None
 
 
+@check("no Claude Code session opens a pull request from a stale kit or decomp",
+       "pull requests built on stale checkouts reverted CI, re-added matched files and cited unlanded matches")
+def _pr_hook():
+    import json
+    try:
+        hooks = json.load(open(f"{KIT}/.claude/settings.json", encoding="utf-8")).get("hooks", {})
+    except (OSError, ValueError) as e:
+        return f".claude/settings.json unreadable: {e}"
+    cmds = " ".join(h.get("command", "") for m in hooks.get("PreToolUse", []) for h in m.get("hooks", []))
+    if "prready.py" not in cmds or "--hook" not in cmds:
+        return "no PreToolUse hook runs prready.py --hook before gh pr create"
+    return None
+
+
 @check("gates accept THUMB",
        "an ARM-only keep-raw regex rejected every thumb function in main as NO-DEF")
 def _thumb():

@@ -10,14 +10,21 @@ import re
 import sys
 
 REPO = _kp.REPO
-addr = int(sys.argv[1], 16)
-mod = sys.argv[2] if len(sys.argv) > 2 else None
-paths = glob.glob(f"{REPO}/config/usa/arm9/delinks.txt") + glob.glob(f"{REPO}/config/usa/arm9/overlays/*/delinks.txt")
-if mod:
-    paths = [p for p in paths if (mod == "main") == ("overlays" not in p) and (mod == "main" or f"ov{mod}" in p)]
-for p in paths:
-    for m in re.finditer(r"(?m)^\s*\.text\s+start:0x([0-9a-fA-F]+)\s+end:0x([0-9a-fA-F]+)[ \t]*\r?$",
-                         open(p, encoding="utf-8", errors="ignore").read()):
-        if int(m.group(1), 16) <= addr < int(m.group(2), 16):
-            sys.exit(0)
-sys.exit(1)
+RANGE = re.compile(r"(?m)^\s*\.text\s+start:0x([0-9a-fA-F]+)\s+end:0x([0-9a-fA-F]+)[ \t]*\r?$")
+
+
+def files(mod=None):
+    paths = glob.glob(f"{REPO}/config/usa/arm9/delinks.txt") + glob.glob(f"{REPO}/config/usa/arm9/overlays/*/delinks.txt")
+    if mod:
+        paths = [p for p in paths if (mod == "main") == ("overlays" not in p) and (mod == "main" or f"ov{mod}" in p)]
+    return paths
+
+
+def covers(addr, texts):
+    return any(int(lo, 16) <= addr < int(hi, 16) for text in texts for lo, hi in RANGE.findall(text))
+
+
+if __name__ == "__main__":
+    mod = sys.argv[2] if len(sys.argv) > 2 else None
+    texts = (open(p, encoding="utf-8", errors="ignore").read() for p in files(mod))
+    sys.exit(0 if covers(int(sys.argv[1], 16), texts) else 1)
