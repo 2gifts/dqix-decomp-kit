@@ -494,7 +494,8 @@ Inert: a copy helper in any argument order, a pointer local per address.
 ### A SINGLE-DEFINITION LOCAL IS RE-DERIVED AFTER A CALL — give it a second definition
 `int prev = i - 1;` is forward-substituted: mwcc reloads `i` and recomputes `i - 1` after the `bl`,
 where the ROM kept it in callee-saved `fp`. Assign it to a variable that already has another
-definition (`idx = i - 1;`, reusing a dead parameter) (`021d8c30`).
+definition (`idx = i - 1;`, reusing a dead parameter) (`021d8c30`). The same variable split in
+place also works: `last = shown; last -= 1;` instead of `last = shown - 1;` (`021db634`, colorsweep r63).
 A function-wide swap decided by one high-pressure loop: bind the ELEMENT address once
 (`SafeAllocator* alloc = &self->allocs[2]; alloc->Reset();`, pass `alloc`) instead of a base plus
 `&alloc[2]` at each use (`02155e28`).

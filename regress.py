@@ -738,6 +738,34 @@ def _r56():
     return None
 
 
+@check("r63 splits `v = e OP k;` into `v = e; v OP= k;` and leaves unsafe forms alone",
+       "A single-definition loop bound is forward-substituted; `last = shown; last -= 1;` closed "
+       "SCHED 13 (ov023:021db634)")
+def _r63():
+    C = load("colorsweep")
+    text = ('// USA: func_f\n'
+            'extern "C" ARM void f(unsigned char shown, int* a, int b)\n'
+            '{\n'
+            '    int last;\n'
+            '    int n = b * 4 + 1;\n'
+            '    last = shown - 1;\n'
+            '    b = a[0] + b;\n'
+            '    b = b >> 2;\n'
+            '    b = a[1] + 1 < b;\n'
+            '    b = g(b - 1);\n'
+            '    a[last] = n;\n'
+            '}\n')
+    got = dict(C.r63_split_assign_op(text))
+    want = {"splitop:last@5": "    last = shown;\n    last -= 1;\n",
+            "splitop:n@4": "    int n = b * 4;\n    n += 1;\n"}
+    for label, needle in want.items():
+        if needle not in got.get(label, ""):
+            return "r63 did not emit %r for %s: %s" % (needle, label, sorted(got))
+    if set(got) != set(want):
+        return "r63 split an unsafe form: %s" % sorted(set(got) - set(want))
+    return None
+
+
 @check("r62 aligns one word-aligned extern data object, preferring an array, never a function",
        "An alignment-qualified object switches mwcc's IR optimizer off for the function (ov015:0218cc24)")
 def _r62():
@@ -1571,6 +1599,9 @@ FUNCTIONAL = [
      "volalias: reading a pointer's fields through a `const volatile` alias forbids mwcc reordering "
      "two loads against each other. The alias is on a PARAMETER, which the first cut of the rule "
      "could not see -- so it could not reproduce the crack it was derived from"),
+    ("023", "021db634", "regress_fixtures/SplitLoopBound_021db634.cpp", "MATCH", 60,
+     "splitop: `last = shown; last -= 1;` gives a single-definition loop bound a second definition, "
+     "so it is not forward-substituted and i2 = 0 schedules first"),
 ]
 
 
