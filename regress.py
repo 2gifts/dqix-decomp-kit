@@ -738,6 +738,24 @@ def _r56():
     return None
 
 
+@check("the body-scoped rules read a function whose opening brace is on its own line",
+       "_r46_body only accepted `ARM f(...) {` on one line, so r51 never offered `short x` on the "
+       "Allman-style ov023:021ddc98 and every body-scoped rule skipped 162 of 710 parked sources")
+def _allman_body():
+    C = load("colorsweep")
+    text = ('// USA: func_f\n'
+            'extern "C" ARM int f(short* p)\n'
+            '{\n'
+            '    int x;\n'
+            '    x = p[0];\n'
+            '    return x + p[1];\n'
+            '}\n')
+    got = dict(C.r51_short_spill(text))
+    if "    short x;\n" not in got.get("shortspill:x@3", ""):
+        return "r51 offered nothing on a brace-below function: %s" % sorted(got)
+    return None
+
+
 @check("r63 splits `v = e OP k;` into `v = e; v OP= k;` and leaves unsafe forms alone",
        "A single-definition loop bound is forward-substituted; `last = shown; last -= 1;` closed "
        "SCHED 13 (ov023:021db634)")
@@ -1602,6 +1620,9 @@ FUNCTIONAL = [
     ("023", "021db634", "regress_fixtures/SplitLoopBound_021db634.cpp", "MATCH", 60,
      "splitop: `last = shown; last -= 1;` gives a single-definition loop bound a second definition, "
      "so it is not forward-substituted and i2 = 0 schedules first"),
+    ("023", "021ddc98", "regress_fixtures/ShortCanvasX_021ddc98.cpp", "MATCH", 60,
+     "shortspill on a brace-below function: `short x` loads with ldrsh into the product temp; the "
+     "prior already loads x before y, since neither step alone moves the score"),
 ]
 
 

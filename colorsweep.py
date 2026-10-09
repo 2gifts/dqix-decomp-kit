@@ -2023,13 +2023,13 @@ _R46_DECL_INT = re.compile(r"^\s+int\s+([A-Za-z_]\w*)\s*;\s*$")
 _R46_FOR_INT = re.compile(r"for\s*\(\s*int\s+([A-Za-z_]\w*)\s*=")
 
 
-def _r46_body(lines, brace_below=False):
+def _r46_body(lines):
     for i, ln in enumerate(lines):
         if not re.search(r"\b(?:ARM|THUMB)\b.*\(", ln):
             continue
         if ln.rstrip().endswith("{"):
             return i + 1
-        if brace_below and ln.rstrip().endswith(")") and i + 1 < len(lines) and lines[i + 1].strip() == "{":
+        if ln.rstrip().endswith(")") and i + 1 < len(lines) and lines[i + 1].strip() == "{":
             return i + 2
     return None
 
@@ -2589,7 +2589,7 @@ def _r63_top_ops(expr):
 
 def r63_split_assign_op(text):
     lines = text.split("\n")
-    start = _r46_body(lines, brace_below=True)
+    start = _r46_body(lines)
     if start is None:
         return []
     out = []
