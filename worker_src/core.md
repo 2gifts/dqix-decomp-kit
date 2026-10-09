@@ -1334,6 +1334,10 @@ repeated eight-call sequence (load overlay, allocate, ctor, stub, run, dtor, fre
 `#define … do { … } while (0)` macro. A block that appears once at the loop head and again at the
 loop tail, with the tail branching back to the head, is written twice in the loop body; mwcc does
 not duplicate it (`main:02000c9c`).
+A step macro whose multi-term sum adds in the wrong order: bind the leaf operand and the sum to
+block-scoped locals inside the macro (`{ unsigned long xv = (w); unsigned long sum = a + f(b, c, d) +
+xv + *t++; a = b + ROTATE_LEFT(sum, s); }`), and give each unrolled round its own `do` counter,
+declared after the word pointer (`020c04e8`).
 
 ## A DESTRUCTOR WRITTEN AS A C++ DESTRUCTOR EMITS THREE OF THEM
 `Class::~Class()` makes mwcc emit the D0 (deleting), D1 (complete) and D2 (base) variants, and under
