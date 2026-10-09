@@ -2,10 +2,10 @@
 
     python regionsync.py [decomp tree]     default: the current directory
 
-For each region with a port tool that has --sync and an extracted ROM: run the sync, build the region,
-commit the ported config when `ninja check` and `ninja sha1` pass, restore it when they do not. The
-tree is reconfigured for usa afterwards. Exit 0: every region in sync, ported or skipped. 1: a port
-was red and was restored.
+For each region with a port tool that has --sync and an extracted ROM: run the sync (after building the
+region first when its tool reads that region's objects), build the region, commit the ported config
+when `ninja check` and `ninja sha1` pass, restore it when they do not. The tree is reconfigured for
+usa afterwards. Exit 0: every region in sync, ported or skipped. 1: a port was red and was restored.
 """
 import os
 import re
@@ -15,7 +15,8 @@ import time
 
 import kitpaths
 
-PORTS = {"eur": "tools/port_eur_config.py"}
+PORTS = {"eur": "tools/port_eur_config.py", "jpn": "tools/port_jpn_config.py"}
+READS_OBJECTS = {"jpn"}
 BROUGHT = re.compile(r"Brought (\d+) names and (\d+) files")
 
 
@@ -42,6 +43,9 @@ def sync(region, tool):
         return 0, f"{region}: {tool} has no --sync, not ported"
     if not os.path.isdir(f"extract/{region}"):
         return 0, f"{region}: no extracted {region} ROM, not ported"
+    if region in READS_OBJECTS:
+        configure(region)
+        run("ninja", "-k", "0", "check")
     code, out = run(sys.executable, tool, "--sync")
     if code:
         run("git", "checkout", "--", f"config/{region}")
