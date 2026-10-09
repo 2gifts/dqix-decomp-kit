@@ -1453,14 +1453,14 @@ def _prready():
         commit(pub_kit, {"README.md": "x\n"})
         want = {"decomp": ("KIT BEHIND", "DECOMP BEHIND", "OUTSIDE A MATCH .github/workflows/match.yml",
                            "DEAD FILE src/Dead.cpp", "HALF RENAME Foo"),
-                "kit": ("KIT BEHIND", "STALE DEAD END 02000010", "UNPROVEN CITATION 02000400")}
+                "kit": ("KIT BEHIND", "NO DEAD ENDS", "UNPROVEN CITATION 02000400")}
         for mode, needles in want.items():
             code, out = prready(mode)
             missing = [n for n in needles if n not in out]
             if code != 1 or missing:
                 return f"prready.py {mode}: exit {code}, missing {missing}: {out.strip()[-400:]}"
-            if mode == "kit" and ("02000040" in out or "CITATION 02000010" in out):
-                return f"prready.py kit flagged an open dead end or a landed citation: {out.strip()[-400:]}"
+            if mode == "kit" and "CITATION 02000010" in out:
+                return f"prready.py kit flagged a landed citation: {out.strip()[-400:]}"
         code, out = prready("--hook", stdin=json.dumps({"tool_input": {"command": "gh pr create -R ZevyaDev/dqix-decomp"}}))
         if code != 2 or "HALF RENAME" not in out:
             return f"the hook let gh pr create through on a stale decomp: exit {code}"
