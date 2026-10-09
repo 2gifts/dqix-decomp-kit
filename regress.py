@@ -1479,6 +1479,45 @@ def _retag_bound_name():
     return None
 
 
+def _scaffold(module, addr):
+    import subprocess
+    r = subprocess.run([sys.executable, f"{KIT}/scaffold.py", module, addr], capture_output=True, text=True,
+                       encoding="utf-8", errors="replace", cwd=KIT)
+    return r.stdout + r.stderr
+
+
+@check("scaffold names a callee by its symbols.txt name, never by a scratch source's definition",
+       "a tracked scratch file defining `Func020c976c` under `// USA: func_020c976c` made main:020d22f4's "
+       "scaffold declare a callee that does not exist")
+def _scaffold_symbols_name():
+    out = _scaffold("main", "020d22f4")
+    if 'extern "C" void func_020c976c();' not in out or "Func020c976c" in out:
+        return "callee at 0x020c976c is not declared as func_020c976c: %s" % out[-300:]
+    return None
+
+
+@check("scaffold declares a mangled callee as C++, never extern \"C\"",
+       "main:020c8bd4's scaffold declared `extern \"C\" void EnableSystemControlBit0();` for the ROM's "
+       "_Z23EnableSystemControlBit0v, which links to a symbol that does not exist")
+def _scaffold_mangled_callee():
+    out = _scaffold("main", "020c8bd4")
+    if "void EnableSystemControlBit0();" not in out:
+        return "no C++ declaration of EnableSystemControlBit0: %s" % out[-300:]
+    if re.search(r'(?m)^extern "C" void (?:_Z|EnableSystemControlBit0)', out):
+        return "a mangled callee was declared extern \"C\""
+    return None
+
+
+@check("scaffold maps a bl that relocs.txt lacks",
+       "relocs.txt has no entry for main:020c8bd4's bl to DisableSystemControlBit0 at +0x50, so the call "
+       "map left it out")
+def _scaffold_rom_call():
+    out = _scaffold("main", "020c8bd4")
+    if not re.search(r"(?m)^\s+\+0x50\s+DisableSystemControlBit0$", out):
+        return "the call map has no +0x50 DisableSystemControlBit0: %s" % out[-300:]
+    return None
+
+
 @check("prready.py refuses a pull request built on a stale kit or decomp, and passes a current one",
        "pull requests built on stale checkouts reverted the CI workflow, re-added a file for an address "
        "another file owned, renamed a symbol in one region only, recorded dead ends for matched "
