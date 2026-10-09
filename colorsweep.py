@@ -2510,19 +2510,25 @@ def r59_reuse_earlier_local(text):
     return out
 
 
-_R60_EXTERN = re.compile(r'(?m)^(\s*extern\s+(?:"C"\s+)?)((?:unsigned |signed )?(?:char|short|int|long)\s+[A-Za-z_]\w*\s*\[)')
+_R60_EXTERN = re.compile(r'(?m)^(\s*extern\s+(?:"C"\s+)?)((?:unsigned |signed )?(?:char|short|int|long)\s+)([A-Za-z_]\w*)(\s*\[)')
+_R60_PTR_EXTERN = re.compile(r'(?m)^(\s*extern\s+(?:"C"\s+)?)((?:(?:const|unsigned|signed|struct)\s+)*[A-Za-z_]\w*\s*\*+\s*)'
+                             r'([A-Za-z_]\w*)(\s*\[)')
 
 
 def r60_const_extern_table(text):
     out = []
-    for m in _R60_EXTERN.finditer(text):
-        if "const" in m.group(1):
-            continue
-        new = text[:m.start()] + m.group(1) + "const " + m.group(2) + text[m.end():]
-        name = re.match(r"(?:unsigned |signed )?(?:char|short|int|long)\s+([A-Za-z_]\w*)", m.group(2)).group(1)
-        if re.search(r"(?<![\w.>])%s\s*\[[^\]]*\]\s*(?:[-+*/|&^]?=(?!=)|\+\+|--)" % re.escape(name), text):
-            continue
-        out.append(("constextern:%s" % name, new))
+    for pat, before_name in ((_R60_EXTERN, False), (_R60_PTR_EXTERN, True)):
+        for m in pat.finditer(text):
+            name = m.group(3)
+            if name == "const" or (not before_name and "const" in m.group(1)):
+                continue
+            if re.search(r"(?<![\w.>])%s\s*\[[^\]]*\]\s*(?:[-+*/|&^]?=(?!=)|\+\+|--)" % re.escape(name), text):
+                continue
+            if before_name:
+                new = text[:m.start()] + m.group(1) + m.group(2).rstrip() + " const " + name + m.group(4) + text[m.end():]
+            else:
+                new = text[:m.start()] + m.group(1) + "const " + m.group(2) + name + m.group(4) + text[m.end():]
+            out.append(("constextern:%s" % name, new))
     return out
 
 

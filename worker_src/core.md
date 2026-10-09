@@ -1138,7 +1138,8 @@ pointer to the `+0x284` sub-struct took the other register. Try both roots.
 `0215b520`: name BOTH the rooted base (`ents` at `+0xa70`, array at `+0x1000`) and the CSEd offset
 (`off = (k + 4) * 0x88`), define them where the ROM first needs them (after the first store, not at
 the loop top), and use them only at the call sites the ROM computes that way. A `const` byte table
-lets its `ldrb` hoist above a volatile store (also `02173954`, colorsweep r60).
+lets its `ldrb` hoist above a volatile store (also `02173954`, colorsweep r60). A pointer table the
+same: `extern T* const tbl[9];` stops its load being ordered before a global store (`020d22f4`).
 Inside a loop the same re-rooting is spelled as raw pointer arithmetic on the element:
 `((int*)o + i)[0xac/4]` rather than `o->idx[i]` (`0218f088`).
 

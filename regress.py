@@ -846,6 +846,17 @@ def _r60():
         return "r60 did not const the read-only table"
     if "constextern:data_rw" in got:
         return "r60 consted a table that is written"
+    ptrs = ('extern Cmd* data_q[9];\n'
+            'extern "C" Cmd* data_w[2];\n'
+            '// USA: func_f\n'
+            'extern "C" ARM Cmd* f(int i) {\n'
+            '    data_w[i] = 0;\n'
+            '    return data_q[i];\n}\n')
+    got = dict(C.r60_const_extern_table(ptrs))
+    if "extern Cmd* const data_q[9];" not in got.get("constextern:data_q", ""):
+        return "r60 did not const the read-only pointer table (main:020d22f4): %s" % sorted(got)
+    if "constextern:data_w" in got:
+        return "r60 consted a pointer table that is written"
     return None
 
 
@@ -1623,6 +1634,9 @@ FUNCTIONAL = [
     ("023", "021ddc98", "regress_fixtures/ShortCanvasX_021ddc98.cpp", "MATCH", 60,
      "shortspill on a brace-below function: `short x` loads with ldrsh into the product temp; the "
      "prior already loads x before y, since neither step alone moves the score"),
+    ("main", "020d22f4", "regress_fixtures/ConstQueueTable_020d22f4.cpp", "MATCH", 60,
+     "constextern on a pointer table: `T* const tbl[9]` takes the indexed load out of the worst-case "
+     "alias set, so it is no longer ordered before the store to the read index"),
 ]
 
 
