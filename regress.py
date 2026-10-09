@@ -1369,6 +1369,33 @@ def _rela_addend():
     return None
 
 
+@check("the NitroSDK stack-size symbols are known linker symbols with the ROM's pool values",
+       "main:020c6d48, 020c745c and 020c8548 load SDK_IRQ_STACKSIZE and SDK_SYS_STACKSIZE from their "
+       "literal pools; lcf_symbols() did not list them, so wgate called every candidate UNDEF-SYM and "
+       "integrate.py skipped it")
+def _sdk_lcf_symbols():
+    import buildcfg
+    elf = _compile_elf('extern "C" void SDK_IRQ_STACKSIZE();\nextern "C" void SDK_SYS_STACKSIZE();\n'
+                       'extern "C" long F(int a) { return a ? (long)SDK_IRQ_STACKSIZE : (long)SDK_SYS_STACKSIZE; }\n',
+                       buildcfg.REPO)
+    if isinstance(elf, str):
+        return elf
+    symtab = elf.get_section_by_name(".symtab")
+    referenced = {symtab.get_symbol(rr["r_info_sym"]) for sec in elf.iter_sections()
+                  if hasattr(sec, "iter_relocations") for rr in sec.iter_relocations()}
+    referenced = {s.name for s in referenced if s["st_shndx"] == "SHN_UNDEF" and s.name}
+    known = buildcfg.lcf_symbols()
+    if referenced - set(known):
+        return "not linker symbols: %s" % sorted(referenced - set(known))
+    pools = {"usa": (0x020c6d78, 0x020c7574), "eur": (0x020c6d88, 0x020c7584), "jpn": (0x020c8844, 0x020c9040)}
+    rom = open(f"{buildcfg.REPO}/{buildcfg.pristine('main')}", "rb").read()
+    for name, addr in zip(("SDK_IRQ_STACKSIZE", "SDK_SYS_STACKSIZE"), pools[buildcfg.REGION]):
+        word = int.from_bytes(rom[addr - 0x02000000:addr - 0x02000000 + 4], "little")
+        if known[name] != word:
+            return "%s = %#x, the ROM's pool word at %08x is %#x" % (name, known[name], addr, word)
+    return None
+
+
 @check("ov_recover gathers a staged file tagged with its bound name instead of skipping it",
        "gather() located a file only by a `// USA: func_<addr>` tag, so a port tagged with its curated "
        "name (`// USA: _Z22OnDMAOrTimerCompletioni`) passed wgate and was silently left out of every "
@@ -1878,6 +1905,60 @@ def _rename_respects_region_blocks():
             "#endif\nvoid f() { Mat4x4_ConvertTo4x3(); _Z18MarkGBABusReleasedv(); }\n")
     if out != want:
         return "rewrote a region block wrongly:\n" + out
+
+
+@check("regionsync keeps the ported modules that build when another ported module is red",
+       "one bad JPN port turned ov025 red; regionsync restored all of config/jpn, so every later "
+       "integration ported nothing to JPN")
+def _regionsync_restores_only_red_modules():
+    import subprocess
+    from types import SimpleNamespace
+    try:
+        rs = load("regionsync")
+    except SystemExit:
+        return "importing regionsync ran it"
+    os.makedirs(f"{SP}/handwork", exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="regionsync_regress_", dir=f"{SP}/handwork",
+                                     ignore_cleanup_errors=True) as root:
+        def git(*args):
+            return subprocess.run(["git", "-C", root, *args], capture_output=True, text=True).stdout.strip()
+        main, ov025 = f"{root}/config/jpn/arm9", f"{root}/config/jpn/arm9/overlays/ov025"
+        for folder in (ov025, f"{root}/extract/jpn", f"{root}/tools"):
+            os.makedirs(folder)
+        for folder in (main, ov025):
+            with open(f"{folder}/delinks.txt", "w") as f:
+                f.write("    .text start:0x02000000 end:0x02000004\n")
+        with open(f"{root}/tools/port.py", "w") as f:
+            f.write('import sys\nif "--help" in sys.argv:\n    print("--sync")\n    sys.exit()\n'
+                    'for folder, name in (("config/jpn/arm9", "a"), ("config/jpn/arm9/overlays/ov025", "b")):\n'
+                    '    with open(folder + "/delinks.txt", "a") as f:\n'
+                    '        f.write(f"\\nsrc/{name}.cpp:\\n    complete\\n    .text start:0x2 end:0x4\\n")\n')
+        git("init", "-q")
+        git("config", "user.name", "regress")
+        git("config", "user.email", "regress@localhost")
+        git("add", "-A")
+        git("commit", "-q", "-m", "base")
+
+        def green():
+            red = "src/b.cpp" in open(f"{ov025}/delinks.txt").read()
+            return not red, "[INFO ] Check ARM9 main: OK\n[INFO ] Check overlay 25: checksum failed\n" if red else ""
+        real = rs.run
+        rs.run = lambda *args: (0, "") if args[0] == "ninja" else real(*args)
+        rs.green, rs.configure, rs.kitpaths = green, lambda region: (0, ""), SimpleNamespace(SP=root)
+        cwd = os.getcwd()
+        os.chdir(root)
+        try:
+            code, line = rs.sync("jpn", "tools/port.py")
+        finally:
+            os.chdir(cwd)
+        if "src/a.cpp" not in git("show", "HEAD:config/jpn/arm9/delinks.txt"):
+            return f"the module that built was not committed: {line}"
+        if ("src/b.cpp" in git("show", "HEAD:config/jpn/arm9/overlays/ov025/delinks.txt")
+                or git("status", "--porcelain", "--", "config")):
+            return f"the red module was committed or left in the tree: {line}"
+        if git("log", "-1", "--format=%s") != "Port 1 matched files to JPN" or code != 1:
+            return f"reported as {code}: {line}"
+    return None
 
 
 STAMP = f"{SP}/wlog/functional_stamp.txt"
