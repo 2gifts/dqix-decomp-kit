@@ -1400,6 +1400,49 @@ def _dataown_replay():
     return None
 
 
+@check("the data planner never writes a compiler-local name into another source",
+       "landing main:020c6d7c renamed bss data_021112dc to its function-scope static isInitialized$13 and "
+       "rewrote a dead `extern int data_021112dc;` in another source to `extern \"C\" int "
+       "isInitialized$13;`, which mwcc rejects")
+def _dataown_local_name():
+    import subprocess
+    import buildcfg
+    import dataown
+    repo = buildcfg.REPO
+    cfg = "config/usa/arm9"
+    landed = "c1328b61"
+    srcpath = "src/Combat/Main/InitializeGamecardBusOwnership.cpp"
+
+    def show(rev, path):
+        r = subprocess.run(["git", "show", "%s:%s" % (rev, path)], cwd=repo, capture_output=True)
+        return r.stdout.decode("utf-8").replace("\r\n", "\n")
+
+    elf = _compile_elf(show(landed, srcpath), repo)
+    if isinstance(elf, str):
+        return elf
+    pristine = open(os.path.join(repo, "extract/usa/arm9/arm9.bin"), "rb").read()
+    index = next(i for i, s in enumerate(elf.iter_sections()) if s.name == ".text")
+    with tempfile.TemporaryDirectory() as tree:
+        os.makedirs(os.path.join(tree, "src"))
+        with open(os.path.join(tree, "src", "Other.cpp"), "w", encoding="utf-8", newline="\n") as fh:
+            fh.write("extern int data_021112dc;\nvoid Other() {}\n")
+        subprocess.run(["git", "init", "-q"], cwd=tree, capture_output=True)
+        subprocess.run(["git", "add", "src"], cwd=tree, capture_output=True)
+        own = os.path.normcase(os.path.abspath(os.path.join(tree, cfg, "relocs.txt")))
+        relocs = {own: (show(landed + "^", cfg + "/relocs.txt"), "\n")}
+        p = dataown.plan(elf, index, 0xcc, 0x020c6d7c, pristine, 0x02000000, "main", cfg, tree, srcpath, {},
+                         show(landed + "^", cfg + "/delinks.txt"), show(landed + "^", cfg + "/symbols.txt"),
+                         relocs)
+    if not isinstance(p, dict):
+        return "the planner refused the landed source: %s" % p
+    if "isInitialized$13 kind:bss addr:0x021112dc local" not in p["symtxt"]:
+        return "symbols.txt does not carry the local static"
+    written = [path for path, (text, _nl) in p["src_edits"].items() if "isInitialized$13" in text]
+    if written:
+        return "a compiler-local name was written into %s" % written
+    return None
+
+
 @check("a pool word's addend is read from r_addend, not from the zero mwcc writes in place",
        "mwcc emits RELA relocations with a zero in-place word; integrate.py, wgate.py and classify.py "
        "took the addend from that word, so a pool reference to symbol+N resolved to the bare symbol and "
