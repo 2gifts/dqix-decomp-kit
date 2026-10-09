@@ -1443,6 +1443,41 @@ def _dataown_local_name():
     return None
 
 
+@check("cf_multi runs on the current colorforce JS and a move reaches the colouring order",
+       "cf_multi patched JS anchors colorforce no longer has and died on its own assert, so the "
+       "`moves`/`choices` probe core.md documents could not run")
+def _cf_multi_moves():
+    import shutil
+    import subprocess
+    tmp = tempfile.mkdtemp()
+    src = os.path.join(tmp, "probe.cpp")
+    shutil.copy(os.path.join(KIT, "regress_fixtures", "DispatchSumOrCopyHalfwords_0218ee38.cpp"), src)
+
+    def trace(cfg):
+        r = subprocess.run([sys.executable, f"{KIT}/pad/cf_multi.py", src, "ov015", "0218ee38", "0xb8", "0xb8",
+                            json.dumps(cfg)], capture_output=True, text=True, cwd=KIT)
+        if r.returncode:
+            return None, (r.stdout + r.stderr).strip()[-300:]
+        with open(os.path.join(tmp, "probe.cfm", "trace.json")) as fh:
+            return json.load(fh)[-1]["nodes"], None
+
+    try:
+        base, err = trace({})
+        if err:
+            return "cf_multi failed: %s" % err
+        order = [n[0] for n in base]
+        if len(order) < 2:
+            return "the last colouring call has %d node(s)" % len(order)
+        moved, err = trace({"moves": [[order[-1], 0]]})
+        if err:
+            return "cf_multi failed with a move: %s" % err
+        if moved[0][0] != order[-1]:
+            return "node %d was not moved to the front: %s" % (order[-1], [n[0] for n in moved][:6])
+        return None
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 @check("a pool word's addend is read from r_addend, not from the zero mwcc writes in place",
        "mwcc emits RELA relocations with a zero in-place word; integrate.py, wgate.py and classify.py "
        "took the addend from that word, so a pool reference to symbol+N resolved to the bare symbol and "
