@@ -2191,6 +2191,32 @@ def _team_quality():
     return None
 
 
+@check("team collect records a worker's lever where levercheck reads it",
+       "about 600 team matches reached decomp-matching with no levers.tsv row, so levercheck saw "
+       "nothing to promote and every discovery stayed in worker reports")
+def _team_levers():
+    import subprocess
+    import tempfile
+    d = tempfile.mkdtemp()
+    tsv = os.path.join(d, "levers.tsv")
+    t = _team()
+    t.record_lever("02133333", 460, 2, "  (int) cast keeps the\tsigned gt  ", tsv=tsv)
+    t.record_lever("02133333", 460, 2, "(int) cast keeps the signed gt", tsv=tsv)
+    if len(open(tsv, encoding="utf-8").read().splitlines()) != 1:
+        return "the same lever was recorded twice"
+    cfg = os.path.join(d, "cfg")
+    os.makedirs(cfg)
+    open(os.path.join(cfg, "delinks.txt"), "w").write("    .text start:0x02133333 end:0x02133400\n")
+    doc = os.path.join(d, "core.md")
+    open(doc, "w").write("cites nothing\n")
+    env = {**os.environ, "LEVERCHECK_TSV": tsv, "LEVERCHECK_DOCS": doc, "LEVERCHECK_CFG": cfg,
+           "LEVERCHECK_DECLINED": os.path.join(d, "none.txt"), "LEVERCHECK_BOARDS": os.path.join(d, "none")}
+    r = subprocess.run([sys.executable, f"{KIT}/levercheck.py", "--keys"], capture_output=True, text=True, env=env)
+    if r.stdout.strip() != "02133333 (int) cast keeps the signed gt":
+        return "levercheck --keys read %r from the recorded row" % r.stdout.strip()
+    return None
+
+
 @check("team integrate gives its private state every directory finish_wave writes into",
        "a fresh <state>-integ had no wlog/, so finish_wave's `tee $SP/wlog/rec_<mod>.log` failed, "
        "ov_recover's output was lost and all eight modules of a 48-function batch reported FATAL")

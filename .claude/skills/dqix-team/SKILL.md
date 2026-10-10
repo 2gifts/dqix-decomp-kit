@@ -86,7 +86,19 @@ Once a pull request is open, leave its branch as it is. Do not merge or rebase
 `decomp-matching` into it, and do not close it to fold it into a bigger batch: maintainers resolve
 `delinks.txt` conflicts at landing. Send the next batch as a new pull request.
 
-## 5. Stop
+## 5. Promote what the batch taught
+
+`collect` writes each worker's reported lever to `$SP/wlog/levers.tsv`. After a batch lands, run
+`python levercheck.py`. For each landed lever it lists:
+
+1. Check that `worker_src/core.md` does not already teach it.
+2. Isolate the cause: the landed source with only that construct removed must stop matching.
+3. Send it as a `core.md` rule citing the address, one per kit pull request, or decline it in
+   `$SP/wlog/levers_declined.txt`.
+
+[IMPROVEMENT_LOOP.md](../../../docs/IMPROVEMENT_LOOP.md) has the loop.
+
+## 6. Stop
 
 1. Publish what is matched (step 4).
 2. Then run `python team/team.py release`. It closes the issue and frees every unfinished row.

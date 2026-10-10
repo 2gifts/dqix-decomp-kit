@@ -68,9 +68,14 @@ assigned address:
     {"functions": [
       {"module": "017", "addr": "0218dd18", "verdict": "MATCH", "residue": "", "size": 568,
        "file": "<abs path>", "description": "Object/world-node collision push-out",
-       "notes": "callee X signature guessed from its call site"}
+       "lever": "bound the add to its own local `int reach = a + b;` to fix the operand order",
+       "lever_bytes": 4, "notes": "callee X signature guessed from its call site"}
     ]}
 
 - `verdict` is `MATCH`, `RESIDUE` (put `wgate`'s last line in `residue`) or `NOT_STARTED`.
 - `description` is a 3-8 word noun phrase; it becomes the function's row in the pull request.
+- `lever` names the source transformation that closed the last residue, concretely
+  ([IMPROVEMENT_LOOP.md](../docs/IMPROVEMENT_LOOP.md) §2). `lever_bytes` is the byte difference just
+  before it. Leave `lever` empty (and `lever_bytes` 0) when the first natural source matched or
+  only declaration order moved. `collect` records each lever in `$SP/wlog/levers.tsv`.
 - `notes` lists any guessed signature, any struct duplicating a header type, and any symbol problem.
